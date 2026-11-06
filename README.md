@@ -143,6 +143,29 @@ A proposal is skipped when you edit the field before applying it. Extraction
 results are cached by file checksum and engine settings, so re-tagging an
 unchanged document costs no new inference.
 
+## Coexistence with Paperless's own AI
+
+Paperless-ngx 3.x has its own AI features: the **Suggest** button, automatic
+suggestions when opening a document, and document chat. They are independent
+of this service. They use only OCR text, their own prompt and the model set in
+`PAPERLESS_AI_LLM_MODEL`, and they don't know about the recipient field or
+`AI: …` tags.
+
+On small local setups the stock Suggest prompt can be too large. It includes
+similar documents and taxonomy candidates, about 7,000 tokens in practice, so it
+fails with *"request exceeds the available context size"* (HTTP 502 "AI backend
+rejected the request") or times out. Options:
+
+| Option | Result | Trade-off |
+|---|---|---|
+| `PAPERLESS_AI_ENABLED=false` | Suggest, auto-suggest and chat are gone; this service fills metadata | No document chat |
+| Larger context (`PAPERLESS_AI_LLM_CONTEXT_SIZE` and Ollama `num_ctx`, e.g. 8192+) | Suggest works with stock prompts | Needs RAM for both models; long prompts are slow on CPU and may hit `PAPERLESS_AI_LLM_REQUEST_TIMEOUT` |
+| Keep AI on, disable *automatic* suggestions in the UI settings | Chat stays; Suggest only when clicked | Clicking Suggest can still fail on small contexts |
+| Custom Paperless prompt templates (bind-mounting files over `paperless_ai/prompts/*.j2`) | Short prompts fit small contexts | Overrides internal files; review on every Paperless upgrade |
+
+With a GPU or a hosted model, leaving both enabled is fine. They share the model
+server, so expect queueing when both run at once.
+
 ## Configuration
 
 Environment variables cover simple setups. For anything larger, mount a YAML
