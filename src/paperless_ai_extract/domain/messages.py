@@ -28,6 +28,7 @@ MESSAGES = {
         "info_recipient_window": "Recipient {name!r} confirmed by address-window OCR.",
         "info_recipient_unknown": "Recipient could not be determined.",
         "info_authors_missing": "Authors not found in document text: {names}",
+        "info_apply_reset": '"{apply}" was removed: it referred to the previous proposal. Review the proposals above and add it again to accept them.',
     },
     "de": {
         "labels": {"title": "Titel", "correspondent": "Korrespondent",
@@ -55,6 +56,7 @@ MESSAGES = {
         "info_recipient_window": "Empfänger {name!r} durch Adressfenster-OCR bestätigt.",
         "info_recipient_unknown": "Empfänger konnte nicht bestimmt werden.",
         "info_authors_missing": "Autoren nicht im Dokumenttext gefunden: {names}",
+        "info_apply_reset": '"{apply}" wurde entfernt: Es bezog sich auf den vorherigen Vorschlag. Vorschläge oben prüfen und zum Übernehmen erneut hinzufügen.',
     },
 }
 

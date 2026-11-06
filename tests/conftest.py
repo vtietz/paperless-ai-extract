@@ -124,8 +124,8 @@ class FakeStore:
                         list(self.tax.storage_paths), list(self.tax.tags),
                         list(self.tax.custom_fields))
 
-    def document_ids_with_tag(self, tag_id, limit):
-        return [d.id for d in self.docs.values() if tag_id in d.tags][:limit]
+    def document_ids_with_tag(self, tag_id):
+        return [d.id for d in self.docs.values() if tag_id in d.tags]
 
     def document(self, doc_id):
         d = self.docs[doc_id]

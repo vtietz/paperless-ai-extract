@@ -47,6 +47,7 @@ class Outcome:
     extraction: Extraction
     cached: bool
     metrics: dict
+    document: DocumentSnapshot | None = None
     written: list[Change] = field(default_factory=list)
 
 
@@ -163,7 +164,7 @@ class MetadataExtractor:
         extraction, cached, metrics = self._extract(doc, ctx, force, download)
         plan = plan_document(self.config, extraction, doc, ctx.taxonomy, self.aliases,
                              confirm_address, mode)
-        return Outcome(plan, extraction, cached, metrics)
+        return Outcome(plan, extraction, cached, metrics, document=doc)
 
     # -- writing -----------------------------------------------------------
     def _ensure_object(self, endpoint: str, name: str, ctx: Context) -> int:
@@ -176,30 +177,48 @@ class MetadataExtractor:
         log.info("created %s %r", endpoint, item.name)
         return item.id
 
+    @staticmethod
+    def _unchanged(ctx: Context, doc: DocumentSnapshot, ch: Change) -> bool:
+        expected = ch.current if ch.action == "fill" else ch.expect
+        return ctx.access.current(doc, ch.field) == expected
+
     def _write(self, doc_id: int, changes: list[Change], ctx: Context) -> list[Change]:
-        """Write only changes whose field still holds the expected value."""
+        """Write only changes whose field still holds the expected value.
+
+        Paperless has no conditional update (If-Match), so this is a check
+        immediately before the write, not an atomic guarantee: taxonomy objects
+        are created first and the document is re-read right before the PATCH to
+        keep the remaining window as short as possible.
+        """
         fresh = self.store.document(doc_id)
+        planned = [ch for ch in changes if ch.field == "tags" or self._unchanged(ctx, fresh, ch)]
+        values: dict[int, object] = {}
+        for index, ch in enumerate(planned):
+            if ch.field != "tags":
+                values[index] = self._ensure_object(*ch.create, ctx) if ch.create else ch.value
+        if any(ch.create for ch in planned):
+            fresh = self.store.document(doc_id)   # creation took time: check again
         direct: dict = {}
         custom: dict = {}
         add_tags: list[int] = []
         written = []
-        for ch in changes:
+        for index, ch in enumerate(planned):
             if ch.field == "tags":   # additive: nothing to overwrite, nothing to check
                 missing = [t for t in ch.value if t not in fresh.tags and t not in add_tags]
                 if missing:
                     add_tags += missing
                     written.append(ch)
                 continue
-            expected = ch.current if ch.action == "fill" else ch.expect
-            if ctx.access.current(fresh, ch.field) != expected:
-                log.info("document %s: %s changed meanwhile, skipped", doc_id, ch.field)
+            if not self._unchanged(ctx, fresh, ch):
                 continue
-            value = self._ensure_object(*ch.create, ctx) if ch.create else ch.value
             if ch.field in DIRECT_FIELDS:
-                direct[ch.field] = value
+                direct[ch.field] = values[index]
             else:
-                custom[ctx.access.custom_field_id(ch.field)] = value
+                custom[ctx.access.custom_field_id(ch.field)] = values[index]
             written.append(ch)
+        for ch in changes:
+            if ch not in written and ch.field != "tags":
+                log.info("document %s: %s changed meanwhile, skipped", doc_id, ch.field)
         self.store.update_document(doc_id, direct)
         self.store.set_custom_fields(doc_id, custom)
         self.store.modify_tags(doc_id, add_tags, [])
@@ -218,6 +237,12 @@ class MetadataExtractor:
         tags = ctx.tag_ids
         add = []
         remove = [tags[r] for r in ("pending", "error") if r in tags]
+        # An accept tag refers to the proposal the user has seen. Re-analysis
+        # replaces that proposal, so the old acceptance must not carry over.
+        if "apply" in tags and (tags["apply"] in outcome.document.tags
+                                or tags["apply"] in self.store.document(doc_id).tags):
+            remove.append(tags["apply"])
+            plan.info.append(self.msg("info_apply_reset", apply=self.config.queue.tags.apply))
         if plan.proposals:
             self.state.save_proposal(doc_id, [c.to_dict() for c in plan.proposals])
             add += [tags["proposal"]] if "proposal" in tags else []

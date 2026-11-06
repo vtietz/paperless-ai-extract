@@ -11,14 +11,16 @@ def test_cycle_processes_pending_documents(build, config):
     assert store.docs[1].title != "scan_0001" and store.docs[2].title == "scan_0001"
 
 
-def test_apply_waits_until_analysis_is_done(build, config):
-    doc = letter_doc(tags=[TAGS["pending"], TAGS["apply"]])
+def test_reanalysis_removes_a_stale_accept_tag(build, config):
+    doc = letter_doc(title="Eigener Titel", tags=[TAGS["pending"], TAGS["apply"]])
     extractor, store = build([doc], FakeLLM(answer()))
     worker = QueueWorker(extractor, config.queue)
-    worker.cycle()                                   # analyses; apply skipped this cycle
-    assert TAGS["apply"] in store.docs[1].tags
-    worker.cycle()                                   # now applies (nothing stored -> removed)
+    worker.cycle()                                   # analyses; does not apply
     assert TAGS["apply"] not in store.docs[1].tags
+    assert store.docs[1].title == "Eigener Titel"
+    assert "was removed" in store.notes[1][-1]
+    worker.cycle()
+    assert store.docs[1].title == "Eigener Titel"    # new proposal still unreviewed
 
 
 def test_retry_backoff_keeps_document_queued(build, config):

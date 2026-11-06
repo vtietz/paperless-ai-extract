@@ -155,6 +155,33 @@ def date_supported(iso_date: str, content: str) -> bool:
     ]
     if any(re.search(p, text) for p in patterns):
         return True
-    # "12. März 2025", "March 12, 2025", "12 Mar 2025": day and year near each other
-    return bool(re.search(rf"\b0?{d}\.?\s+[^\W\d_]{{3,10}}\.?\s+{y}\b", text)
-                or re.search(rf"\b[^\W\d_]{{3,10}}\.?\s+0?{d},?\s+{y}\b", text))
+    # "12. März 2025", "12 Mar 2025", "March 12, 2025": the month word must match too.
+    for match in re.finditer(rf"\b0?{d}\.?\s+([^\W\d_]{{3,10}})\.?\s+{y}\b", text):
+        if month_number(match.group(1)) == m:
+            return True
+    for match in re.finditer(rf"\b([^\W\d_]{{3,10}})\.?\s+0?{d}(?:st|nd|rd|th)?,?\s+{y}\b", text):
+        if month_number(match.group(1)) == m:
+            return True
+    return False
+
+
+_MONTHS = {
+    1: ("januar", "jänner", "january", "jan", "jän"),
+    2: ("februar", "february", "feb"),
+    3: ("märz", "maerz", "march", "mär", "mar"),
+    4: ("april", "apr"),
+    5: ("mai", "may"),
+    6: ("juni", "june", "jun"),
+    7: ("juli", "july", "jul"),
+    8: ("august", "aug"),
+    9: ("september", "sept", "sep"),
+    10: ("oktober", "october", "okt", "oct"),
+    11: ("november", "nov"),
+    12: ("dezember", "december", "dez", "dec"),
+}
+_MONTH_LOOKUP = {name: number for number, names in _MONTHS.items() for name in names}
+
+
+def month_number(word: str) -> int | None:
+    """German or English month name or abbreviation -> 1..12."""
+    return _MONTH_LOOKUP.get(word.casefold().rstrip("."))

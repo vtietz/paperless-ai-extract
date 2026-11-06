@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.1 — 2026-11-06
+
+Fixes from an external review:
+
+- Re-analysis removes a pending `AI: apply` tag, so an old acceptance can no
+  longer approve a new, unreviewed proposal; the note says so.
+- Write guard re-reads the document after creating correspondents or document
+  types, right before writing. Still a check, not a lock: Paperless has no
+  conditional updates. Documentation no longer says "never overwrites".
+- Model answers missing required fields (e.g. `{}` from backends without
+  schema enforcement) are rejected and retried instead of completing the document.
+- Textual dates ("12. März 2025", "March 12, 2025") must match the month.
+- Documents in retry backoff no longer block newer queued documents.
+- Examples use a named volume; bind mounts need `chown 1000` (documented).
+
 ## 0.1.0 — 2026-11-06
 
 First public version.

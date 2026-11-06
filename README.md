@@ -9,10 +9,15 @@ the Paperless REST API: no patches, no mounted Paperless source, no extra web UI
 
 It is deliberately **conservative**:
 
-- **Never overwrites.** Empty fields are filled. Values that are already set,
-  including your manual corrections, only get a *proposal*.
+- **Doesn't overwrite.** Empty fields are filled. Values that are already set,
+  including your manual corrections, only get a *proposal*. Each field is
+  checked again immediately before writing. Paperless has no conditional
+  updates, so an edit made in the same instant can still lose; this is a
+  check, not a lock.
 - **Review happens inside Paperless.** Proposals appear as a document note
-  and a tag. Adding the tag `AI: apply` accepts them.
+  and a tag. Adding the tag `AI: apply` accepts the proposal from the latest
+  note. If the document is re-analysed first, the accept tag is removed and
+  you review the new proposal.
 - **Fail-closed evidence checks.** New correspondents, dates, journal names and
   addressees must be backed by the document text. Otherwise they become a
   proposal, not a fill.
@@ -36,8 +41,8 @@ It extracts the following; everything except the first three is optional:
 [paperless-ai](https://github.com/clusterzx/paperless-ai) are larger, more
 feature-rich projects with their own web UIs (review screens, chat, OCR
 pipelines). Choose this project if you want a headless, minimal container whose
-review workflow is plain Paperless (notes, tags, workflows), and that never
-overwrites existing metadata.
+review workflow is plain Paperless (notes, tags, workflows), and that leaves
+existing metadata alone.
 
 ## Quick start: add it to your Paperless Compose stack
 
@@ -66,9 +71,16 @@ services:
     depends_on: [webserver]
     env_file: ai-extract.env
     volumes:
-      - ./ai-extract:/data            # small cache and proposals (uid 1000)
+      - ai-extract-data:/data         # small cache and proposals
     stop_grace_period: 6m             # let a running request finish
+
+volumes:
+  ai-extract-data:
 ```
+
+   A named volume works out of the box. For a bind mount, create the directory
+   first and give it to the container user: `mkdir ai-extract && chown 1000 ai-extract`
+   (or set `user:` to the directory's owner).
 
    Minimal `ai-extract.env`:
 

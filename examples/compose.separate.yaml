@@ -19,10 +19,12 @@ services:
     restart: unless-stopped
     env_file: ai-extract.env
     volumes:
-      - ./data:/data
+      - ai-extract-data:/data            # bind mount: mkdir data && chown 1000 data first
       # - ./config:/config:ro            # optional config.yaml, prompt, aliases
     stop_grace_period: 6m
     networks: [paperless-ai]
+volumes:
+  ai-extract-data:
 networks:
   paperless-ai:
     external: true

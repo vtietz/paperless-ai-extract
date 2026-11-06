@@ -72,10 +72,17 @@ class PaperlessClient:
             custom_fields=self._all("/api/custom_fields/"),
         )
 
-    def document_ids_with_tag(self, tag_id: int, limit: int) -> list[int]:
-        data = self._json("GET", "/api/documents/", params={
-            "tags__id__all": tag_id, "ordering": "added", "page_size": limit, "fields": "id"})
-        return [d["id"] for d in data.get("results", [])]
+    def document_ids_with_tag(self, tag_id: int) -> list[int]:
+        """All documents carrying the tag, oldest first (IDs only, paginated)."""
+        ids, page = [], 1
+        while True:
+            data = self._json("GET", "/api/documents/", params={
+                "tags__id__all": tag_id, "ordering": "added", "fields": "id",
+                "page": page, "page_size": 100})
+            ids += [d["id"] for d in data.get("results", [])]
+            if not data.get("next"):
+                return ids
+            page += 1
 
     def document(self, doc_id: int) -> DocumentSnapshot:
         return snapshot_from_api(self._json("GET", f"/api/documents/{doc_id}/"))

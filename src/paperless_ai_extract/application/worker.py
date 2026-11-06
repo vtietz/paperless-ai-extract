@@ -34,21 +34,25 @@ class QueueWorker:
             raise ConfigError("queue tags missing; run `check --create-tags` "
                               "or set queue.create_missing_tags")
         done = 0
-        for doc_id in ex.store.document_ids_with_tag(tags["apply"], self.queue.batch_size):
+        pending = ex.store.document_ids_with_tag(tags["pending"])
+        # A document queued for re-analysis gets a new proposal; processing it
+        # removes a stale accept tag instead of applying the old proposal.
+        accepted = [d for d in ex.store.document_ids_with_tag(tags["apply"])
+                    if d not in set(pending)]
+        for doc_id in accepted[: self.queue.batch_size]:
             if self.stopping:
                 return done
-            if tags["pending"] in ex.store.document(doc_id).tags:
-                continue  # analyse first; apply on a later cycle
             try:
                 ex.apply_proposal(doc_id, ctx)
                 done += 1
             except StoreError as exc:
                 log.warning("document %s: apply failed: %s", doc_id, exc)
-        for doc_id in ex.store.document_ids_with_tag(tags["pending"], self.queue.batch_size):
+        # Select eligible work before limiting, so documents in retry backoff
+        # never block newer ones.
+        due = [d for d in pending if ex.state.retry_due(d)]
+        for doc_id in due[: self.queue.batch_size]:
             if self.stopping:
                 return done
-            if not ex.state.retry_due(doc_id):
-                continue
             try:
                 ex.process(doc_id, ctx)
                 done += 1

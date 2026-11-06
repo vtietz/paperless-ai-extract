@@ -69,6 +69,13 @@ def parse_extraction(text: str, config: ExtractionConfig,
         raise ExtractionError("model answer is not valid JSON") from exc
     if not isinstance(data, dict):
         raise ExtractionError("model answer is not a JSON object")
+    # Backends without schema enforcement (json_object/none) may return partial
+    # or empty objects; an answer without the required fields is a failure, not
+    # an empty result that would silently complete the document.
+    required = build_schema(config, recipient_labels, tag_names)["required"]
+    missing = [key for key in required if key not in data]
+    if missing:
+        raise ExtractionError("model answer lacks required fields: " + ", ".join(missing))
 
     kind = data.get("kind", config.kinds[0]) if len(config.kinds) > 1 else config.kinds[0]
     if kind not in config.kinds:

@@ -8,7 +8,9 @@ services:
     depends_on: [webserver]
     env_file: ai-extract.env
     volumes:
-      - ./ai-extract:/data            # cache, proposals, heartbeat (owned by uid 1000)
+      # Named volume: Docker initialises it with the image's ownership (uid 1000).
+      # For a bind mount instead, create it first: mkdir ai-extract && chown 1000 ai-extract
+      - ai-extract-data:/data
       # - ./ai-extract-config:/config:ro   # optional config.yaml, prompt, aliases
     stop_grace_period: 6m             # let a running request finish
 
@@ -17,4 +19,8 @@ services:
   #   image: ollama/ollama
   #   restart: unless-stopped
   #   volumes:
-  #     - ./ollama:/root/.ollama
+  #     - ollama-models:/root/.ollama
+
+volumes:
+  ai-extract-data:
+  # ollama-models:
