@@ -1,0 +1,15 @@
+# Minimal setup: title, correspondent and document type from the first page image.
+paperless:
+  url: http://paperless:8000
+  token: ${PAPERLESS_TOKEN}
+llm:
+  provider: ollama
+  base_url: http://ollama:11434
+  model: qwen3.5:4b
+  options: {num_ctx: 4096, temperature: 0.1}
+extraction:
+  prompt_file: prompt.minimal.txt
+policy:
+  fields: [title, correspondent, document_type]
+queue:
+  create_missing_tags: true

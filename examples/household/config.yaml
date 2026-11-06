@@ -1,0 +1,38 @@
+# Household profile: letters get a Recipient (select custom field), articles get
+# authors/journal/year. Replace names with your own dropdown labels and aliases.
+paperless:
+  url: http://paperless:8000
+  token: ${PAPERLESS_TOKEN}
+llm:
+  provider: ollama
+  base_url: http://ollama:11434
+  model: qwen3.5:4b
+  timeout: 300
+  options: {num_ctx: 4096, num_thread: 3, num_batch: 128, num_predict: 768,
+            temperature: 0.1, seed: 42}
+  think: false
+input:
+  mode: image
+  pages: 1
+  max_edge: 1120
+extraction:
+  prompt_file: prompt.txt
+  kinds: [household, article]
+  recipient:
+    enabled: true
+    custom_field: Recipient
+    unassigned: Unassigned
+    shared: Shared
+    shared_keywords: [familie, household, family]
+    aliases:
+      "Alex Example & Sam Example": ["Example/Sample", "Sample/Example"]
+      "Kim Example": ["Kimmy Example"]
+    address_window: {enabled: true, languages: deu+eng}
+  articles:
+    enabled: true
+    authors_field: Authors
+taxonomy:
+  correspondent_aliases_file: correspondent-aliases.json
+  storage_paths:
+    household: "Household / Correspondent"
+    article: Articles

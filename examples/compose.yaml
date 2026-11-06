@@ -1,0 +1,17 @@
+# Example deployment next to Paperless and Ollama on a shared network.
+services:
+  extractor:
+    build: https://example.invalid/paperless-ai-extract.git   # or a local path / published image
+    image: paperless-ai-extract:local
+    restart: unless-stopped
+    command: ["serve"]
+    environment:
+      PAPERLESS_TOKEN: ${PAPERLESS_TOKEN:?set in .env}
+    volumes:
+      - ./config:/config:ro
+      - ./data:/data
+    stop_grace_period: 6m        # let an in-flight inference finish
+    networks: [paperless]
+networks:
+  paperless:
+    external: true
