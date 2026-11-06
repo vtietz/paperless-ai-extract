@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import logging
 import shutil
 import sqlite3
@@ -37,7 +38,7 @@ def cmd_check(args, config) -> int:
     ctx_holder = {}
 
     def context():
-        ctx_holder["ctx"] = extractor.context(create_tags=args.create_tags)
+        ctx_holder["ctx"] = extractor.context(create_tags=True if args.create_tags else None)
         ctx = ctx_holder["ctx"]
         return f"{len(ctx.taxonomy.correspondents)} correspondents, fingerprint {ctx.fingerprint}"
     report("taxonomy/prompt/schema", context)
@@ -118,7 +119,8 @@ def cmd_health(args, config) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="paperless-ai-extract")
-    parser.add_argument("-c", "--config", default="/config/config.yaml")
+    parser.add_argument("-c", "--config", default=os.environ.get("PAE_CONFIG", "/config/config.yaml"),
+                        help="YAML config (optional when configured via environment)")
     parser.add_argument("-v", "--verbose", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
     check = sub.add_parser("check", help="verify Paperless, LLM, taxonomy, tags and tools")

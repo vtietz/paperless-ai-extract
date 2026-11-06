@@ -8,6 +8,7 @@ Rules (one engine for import and manual reruns):
                                                      (if any) and propose the value.
   * Non-empty field, or propose policy             -> propose (never overwrite).
   * Storage path is only ever filled when empty, never proposed.
+  * Tags are only ever added, never removed.
 """
 from __future__ import annotations
 
@@ -15,15 +16,24 @@ from pathlib import PurePath
 from typing import Callable
 
 from ..config import Config
-from .evidence import occurs_in, validated_recipient
+from .evidence import date_supported, occurs_in, validated_recipient
 from .matching import apply_alias, find
-from .models import Candidate, Change, DocumentSnapshot, Extraction, Plan, Taxonomy
+from .messages import Messages
+from .models import Candidate, Change, DocumentSnapshot, Extraction, Item, Plan, Taxonomy
 
-LABELS = {"title": "Title", "correspondent": "Correspondent",
-          "document_type": "Document type", "storage_path": "Storage path",
-          "created": "Created", "recipient": "Recipient", "authors": "Authors"}
 DIRECT_FIELDS = {"title", "correspondent", "document_type", "storage_path", "created"}
 NEVER_PROPOSE = {"storage_path"}
+
+
+def selectable_tags(config: Config, taxonomy: Taxonomy) -> list[Item]:
+    """Tags the model may choose: never inbox or queue tags."""
+    tags_cfg = config.extraction.tags
+    reserved = {n for n in config.queue.tags.model_dump().values() if n} | set(tags_cfg.excluded)
+    usable = [t for t in taxonomy.tags if not t.inbox and t.name not in reserved]
+    if tags_cfg.allowed:
+        wanted = set(tags_cfg.allowed)
+        usable = [t for t in usable if t.name in wanted]
+    return sorted(usable, key=lambda t: t.name.casefold())
 
 
 class FieldAccess:
@@ -32,6 +42,7 @@ class FieldAccess:
     def __init__(self, config: Config, taxonomy: Taxonomy):
         self.config = config
         self.taxonomy = taxonomy
+        self.msg = Messages(config.policy.notes_language)
         recipient = config.extraction.recipient
         self.recipient_field = taxonomy.custom_field(recipient.custom_field) if recipient.enabled else None
         authors = config.extraction.articles.authors_field
@@ -50,32 +61,35 @@ class FieldAccess:
         return f["id"] if f else None
 
     def current(self, doc: DocumentSnapshot, name: str):
+        if name == "tags":
+            return list(doc.tags)
         if name in DIRECT_FIELDS:
             return getattr(doc, name)
         field_id = self.custom_field_id(name)
         return doc.custom_fields.get(field_id) if field_id is not None else None
 
     def display(self, name: str, value) -> str:
-        if value in (None, ""):
-            return "(empty)"
+        if value in (None, "", []):
+            return self.msg("empty")
+        if name == "tags":
+            return ", ".join(self.taxonomy.name_of("tags", i) or "" for i in value)
         if name in ("correspondent", "document_type", "storage_path"):
-            return self.taxonomy.name_of(name + "s", value) or "(empty)"
+            return self.taxonomy.name_of(name + "s", value) or self.msg("empty")
         if name == "recipient":
             for label, option_id in self.recipient_options().items():
                 if option_id == value:
                     return label
         return str(value)
 
-    def is_empty(self, doc: DocumentSnapshot, name: str, mode: str) -> bool:
+    def is_empty(self, doc: DocumentSnapshot, name: str) -> bool:
         if name == "title":
             stem = PurePath(doc.original_file_name or "").stem
             return not doc.title.strip() or (
                 self.config.policy.title_empty_if_filename and bool(stem) and doc.title == stem)
+        if name == "tags":
+            return True       # adding tags never overwrites anything
         if name == "created":
-            # Paperless always sets a date at import. Only the first bibliography
-            # pass may initialise it from a publication year.
-            return mode == "first_run" and (
-                self.authors_field is None or self.authors_field["id"] not in doc.custom_fields)
+            return False      # Paperless always sets a date; see treat_as_empty
         return self.current(doc, name) in (None, "")
 
 
@@ -84,6 +98,7 @@ def build_candidates(config: Config, ex: Extraction, doc: DocumentSnapshot,
                      correspondent_aliases: dict[str, str],
                      confirm_address: Callable[[], str | None],
                      mode: str) -> tuple[list[Candidate], list[str], bool]:
+    msg = access.msg
     tax_cfg = config.taxonomy
     articles = config.extraction.articles
     is_article = articles.enabled and ex.kind == articles.kind
@@ -102,16 +117,18 @@ def build_candidates(config: Config, ex: Extraction, doc: DocumentSnapshot,
         if match:
             cand = Candidate("correspondent", match.id, match.name)
         elif tax_cfg.create_correspondents:
-            cand = Candidate("correspondent", None, f"{name} (new)", create=("correspondents", name))
+            cand = Candidate("correspondent", None, msg("new", name=name),
+                             create=("correspondents", name))
             if tax_cfg.new_correspondent_requires_text_evidence and not (
                     occurs_in(name, content) or occurs_in(ex.correspondent, content)):
-                cand.verified, cand.reason = False, "new name not found in document text"
+                cand.verified, cand.reason = False, msg("reason_new_name")
         else:
-            cand = Candidate("correspondent", None, f"{name} (new)", create=("correspondents", name),
-                             verified=False, reason="no existing match; creation disabled")
+            cand = Candidate("correspondent", None, msg("new", name=name),
+                             create=("correspondents", name),
+                             verified=False, reason=msg("reason_creation_disabled"))
         if article_evidence and cand.verified and not (
                 occurs_in(ex.correspondent, content) or occurs_in(name, content)):
-            cand.verified, cand.reason = False, "publication not found in document text"
+            cand.verified, cand.reason = False, msg("reason_publication")
         candidates.append(cand)
 
     if ex.document_type:
@@ -119,11 +136,11 @@ def build_candidates(config: Config, ex: Extraction, doc: DocumentSnapshot,
         if match:
             candidates.append(Candidate("document_type", match.id, match.name))
         else:
+            allowed = tax_cfg.create_document_types
             candidates.append(Candidate(
-                "document_type", None, f"{ex.document_type} (new)",
-                create=("document_types", ex.document_type),
-                verified=tax_cfg.create_document_types,
-                reason="" if tax_cfg.create_document_types else "no existing match; creation disabled"))
+                "document_type", None, msg("new", name=ex.document_type),
+                create=("document_types", ex.document_type), verified=allowed,
+                reason="" if allowed else msg("reason_creation_disabled")))
 
     path_name = tax_cfg.storage_paths.get(ex.kind)
     if path_name:
@@ -131,7 +148,14 @@ def build_candidates(config: Config, ex: Extraction, doc: DocumentSnapshot,
         if path:
             candidates.append(Candidate("storage_path", path.id, path.name))
         else:
-            info.append(f"Configured storage path {path_name!r} does not exist.")
+            info.append(msg("info_storage_path", name=path_name))
+
+    if ex.tags:
+        by_name = {t.name: t for t in selectable_tags(config, taxonomy)}
+        new = [by_name[n] for n in ex.tags if n in by_name and by_name[n].id not in doc.tags]
+        if new:
+            candidates.append(Candidate("tags", [t.id for t in new],
+                                        msg("added", names=", ".join(t.name for t in new))))
 
     rc = config.extraction.recipient
     if rc.enabled and not is_article and access.recipient_field and ex.recipient:
@@ -143,17 +167,17 @@ def build_candidates(config: Config, ex: Extraction, doc: DocumentSnapshot,
             confirmed = confirm_address()
             if confirmed and confirmed in options:
                 chosen = confirmed
-                info.append(f"Recipient {confirmed!r} confirmed by address-window OCR.")
+                info.append(msg("info_recipient_window", name=confirmed))
         if chosen != rc.unassigned or ex.recipient == rc.unassigned:
             candidates.append(Candidate("recipient", options[chosen], chosen))
             if chosen == rc.unassigned:
-                info.append("Recipient could not be determined.")
+                info.append(msg("info_recipient_unknown"))
                 review = True
         else:
             quote = " ".join(ex.addressee_text.split())[:120]
             candidates.append(Candidate(
                 "recipient", options[ex.recipient], ex.recipient, verified=False,
-                reason=f'addressee evidence not confirmed (quote: "{quote}")',
+                reason=msg("reason_addressee", quote=quote),
                 fallback=unassigned_id, fallback_display=rc.unassigned))
             review = True
 
@@ -166,21 +190,34 @@ def build_candidates(config: Config, ex: Extraction, doc: DocumentSnapshot,
         if found:
             candidates.append(Candidate("authors", "; ".join(found), "; ".join(found)))
             if missing:
-                info.append("Authors not found in document text: " + "; ".join(missing))
+                info.append(msg("info_authors_missing", names="; ".join(missing)))
                 review = True
         else:
             joined = "; ".join(ex.authors)
             candidates.append(Candidate("authors", joined, joined, verified=False,
-                                        reason="authors not found in document text"))
+                                        reason=msg("reason_authors")))
 
+    current_date = doc.created[:10] if doc.created else None
     if is_article and articles.created_from_year and ex.publication_year:
         year = ex.publication_year
-        current_year = int(doc.created[:4]) if doc.created and doc.created[:4].isdigit() else None
+        current_year = int(current_date[:4]) if current_date and current_date[:4].isdigit() else None
         if current_year != year:
             value = f"{year}-01-01"
             verified = not articles.require_text_evidence or str(year) in content
+            # Only the first bibliography pass may initialise the date from a year.
+            first_pass = mode == "first_run" and (
+                access.authors_field is None or access.authors_field["id"] not in doc.custom_fields)
             candidates.append(Candidate("created", value, value, verified=verified,
-                                        reason="" if verified else "year not found in document text"))
+                                        reason="" if verified else msg("reason_year"),
+                                        treat_as_empty=first_pass))
+    elif config.extraction.document_date.enabled and ex.document_date \
+            and ex.document_date != current_date:
+        verified = date_supported(ex.document_date, content)
+        fill = config.extraction.document_date.first_run == "fill" and mode == "first_run"
+        candidates.append(Candidate("created", ex.document_date, ex.document_date,
+                                    verified=verified,
+                                    reason="" if verified else msg("reason_date"),
+                                    treat_as_empty=fill))
 
     return candidates, info, review
 
@@ -204,7 +241,8 @@ def decide(config: Config, candidates: list[Candidate], doc: DocumentSnapshot,
             return Change(cand.field, action, current, current_display, value, display,
                           create, verified, reason, expect)
 
-        empty = access.is_empty(doc, cand.field, mode)
+        empty = (cand.treat_as_empty if cand.treat_as_empty is not None
+                 else access.is_empty(doc, cand.field))
         if empty and policy == "fill_empty":
             if cand.verified:
                 changes.append(change("fill", cand.value, cand.display, create=cand.create))
@@ -234,16 +272,20 @@ def plan_document(config: Config, ex: Extraction, doc: DocumentSnapshot,
                 review or any(not c.verified for c in changes))
 
 
-def note_text(plan: Plan, model: str, mode_label: str, apply_tag: str) -> str:
-    lines = [f"AI extraction ({model}, {mode_label})"]
+def note_text(plan: Plan, model: str, msg: Messages, apply_tag: str) -> str:
+    labels = msg.labels
+    lines = [msg("header", model=model, mode=msg(plan.mode))]
     if plan.proposals:
-        lines.append(f'Proposed changes - add the tag "{apply_tag}" to accept all, or edit manually:')
+        lines.append(msg("proposals", apply=apply_tag))
         for c in plan.proposals:
             flag = f" [{c.reason}]" if c.reason else ""
-            lines.append(f'- {LABELS[c.field]}: "{c.current_display}" -> "{c.display}"{flag}')
+            if c.field == "tags":
+                lines.append(f"- {labels['tags']}: {c.display}{flag}")
+            else:
+                lines.append(f'- {labels[c.field]}: "{c.current_display}" -> "{c.display}"{flag}')
     if plan.fills:
-        lines.append("Filled automatically: " + ", ".join(
-            f'{LABELS[c.field]} "{c.display}"' for c in plan.fills))
+        lines.append(msg("filled", items=", ".join(
+            f'{labels[c.field]} "{c.display}"' for c in plan.fills)))
     for item in plan.info:
-        lines.append(f"Note: {item}")
+        lines.append(msg("note", text=item))
     return "\n".join(lines)

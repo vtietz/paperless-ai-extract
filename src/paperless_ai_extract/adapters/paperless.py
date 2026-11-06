@@ -62,7 +62,8 @@ class PaperlessClient:
 
     def taxonomy(self) -> Taxonomy:
         def items(path: str) -> list[Item]:
-            return [Item(o["id"], o["name"], o.get("owner")) for o in self._all(path)]
+            return [Item(o["id"], o["name"], o.get("owner"), bool(o.get("is_inbox_tag")))
+                    for o in self._all(path)]
         return Taxonomy(
             correspondents=items("/api/correspondents/"),
             document_types=items("/api/document_types/"),

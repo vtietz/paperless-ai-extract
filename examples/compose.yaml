@@ -1,17 +1,20 @@
-# Example deployment next to Paperless and Ollama on a shared network.
+# Add this service to an existing paperless-ngx compose file (service names as in
+# the official paperless-ngx examples: webserver, db, broker).
+#   cp ai-extract.env.example ai-extract.env   # then set PAPERLESS_TOKEN etc.
 services:
-  extractor:
-    build: https://example.invalid/paperless-ai-extract.git   # or a local path / published image
-    image: paperless-ai-extract:local
+  ai-extract:
+    image: ghcr.io/vtietz/paperless-ai-extract:0.1
     restart: unless-stopped
-    command: ["serve"]
-    environment:
-      PAPERLESS_TOKEN: ${PAPERLESS_TOKEN:?set in .env}
+    depends_on: [webserver]
+    env_file: ai-extract.env
     volumes:
-      - ./config:/config:ro
-      - ./data:/data
-    stop_grace_period: 6m        # let an in-flight inference finish
-    networks: [paperless]
-networks:
-  paperless:
-    external: true
+      - ./ai-extract:/data            # cache, proposals, heartbeat (owned by uid 1000)
+      # - ./ai-extract-config:/config:ro   # optional config.yaml, prompt, aliases
+    stop_grace_period: 6m             # let a running request finish
+
+  # Optional local model server. CPU works (about a minute per page); add GPU settings if available.
+  # ollama:
+  #   image: ollama/ollama
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ./ollama:/root/.ollama

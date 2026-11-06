@@ -6,6 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "paperless-ai-extract"
 version = "0.1.0"
 description = "Image- or text-based LLM metadata extraction for Paperless-ngx via its REST API"
+license = { text = "MIT" }
+authors = [{ name = "Vincent Tietz" }]
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -14,6 +16,9 @@ dependencies = [
   "PyYAML>=6,<7",
   "Pillow>=10,<12",
 ]
+
+[project.urls]
+Homepage = "https://github.com/vtietz/paperless-ai-extract"
 
 [project.optional-dependencies]
 test = ["pytest>=8"]

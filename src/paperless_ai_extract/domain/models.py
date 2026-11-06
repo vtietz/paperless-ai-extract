@@ -10,6 +10,7 @@ class Item:
     id: int
     name: str
     owner: int | None = None
+    inbox: bool = False                     # tags only: Paperless inbox tag
 
 
 @dataclass
@@ -56,6 +57,8 @@ class Extraction:
     publication_year: int | None = None
     addressee_text: str = ""
     recipient: str | None = None
+    tags: list[str] = field(default_factory=list)
+    document_date: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -69,13 +72,14 @@ class Extraction:
 class Candidate:
     """A usable value derived from the extraction, with its evidence status."""
     field: str
-    value: object                           # API value; None when it must be created
+    value: object                           # API value (tags: ids to add); None = create
     display: str
     create: tuple[str, str] | None = None   # (taxonomy endpoint, name)
     verified: bool = True
     reason: str = ""
     fallback: object = None                 # safe value to fill when unverified
     fallback_display: str = ""
+    treat_as_empty: bool | None = None      # overrides the field's own emptiness rule
 
 
 @dataclass

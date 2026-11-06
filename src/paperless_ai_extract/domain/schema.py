@@ -2,14 +2,19 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 
 from ..config import ExtractionConfig
 from .errors import ExtractionError
 from .models import Extraction
 
+DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
 
-def build_schema(config: ExtractionConfig, recipient_labels: list[str] | None) -> dict:
-    """Property order matters to small models; it follows the validated pilot."""
+
+def build_schema(config: ExtractionConfig, recipient_labels: list[str] | None,
+                 tag_names: list[str] | None = None) -> dict:
+    """Property order matters to small models; the household/article order follows
+    the validated pilot, optional generic fields are inserted after document type."""
     props: dict = {}
     if len(config.kinds) > 1:
         props["kind"] = {"type": "string", "enum": list(config.kinds)}
@@ -23,6 +28,12 @@ def build_schema(config: ExtractionConfig, recipient_labels: list[str] | None) -
                                "items": {"type": "string", "maxLength": 128}}
     props["document_types"] = {"type": "array", "maxItems": 1,
                                "items": {"type": "string", "maxLength": 64}}
+    if config.tags.enabled and tag_names:
+        props["tags"] = {"type": "array", "maxItems": config.tags.max_tags,
+                         "items": {"type": "string", "enum": list(tag_names)}}
+    if config.document_date.enabled:
+        props["document_date"] = {"anyOf": [
+            {"type": "string", "pattern": DATE_PATTERN}, {"type": "null"}]}
     if config.recipient.enabled:
         if not recipient_labels:
             raise ValueError("recipient extraction needs dropdown labels")
@@ -40,8 +51,18 @@ def _strings(value, name: str, limit: int) -> list[str]:
     return [v.strip() for v in value if v.strip()][:limit]
 
 
+def _iso_date(value) -> str | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value.strip()).isoformat()
+    except ValueError:
+        return None
+
+
 def parse_extraction(text: str, config: ExtractionConfig,
-                     recipient_labels: list[str] | None) -> Extraction:
+                     recipient_labels: list[str] | None,
+                     tag_names: list[str] | None = None) -> Extraction:
     try:
         data = json.loads(text)
     except ValueError as exc:
@@ -70,6 +91,13 @@ def parse_extraction(text: str, config: ExtractionConfig,
                                  or not 1000 <= year <= 2999):
             raise ExtractionError("publication_year must be a four-digit integer or null")
         result.publication_year = year
+    if config.tags.enabled:
+        allowed = set(tag_names or [])
+        # Servers without schema enforcement may invent tags: keep only allowed ones.
+        chosen = [t for t in _strings(data.get("tags"), "tags", 50) if t in allowed]
+        result.tags = list(dict.fromkeys(chosen))[: config.tags.max_tags]
+    if config.document_date.enabled:
+        result.document_date = _iso_date(data.get("document_date"))
     if config.recipient.enabled:
         recipient = data.get("recipient")
         if recipient not in (recipient_labels or []):

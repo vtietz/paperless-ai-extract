@@ -16,7 +16,7 @@ input:
   pages: 1
   max_edge: 1120
 extraction:
-  prompt_file: prompt.txt
+  prompt_file: prompt.txt          # custom prompt; omit to use the built-in one
   kinds: [household, article]
   recipient:
     enabled: true
@@ -32,6 +32,9 @@ extraction:
     enabled: true
     authors_field: Authors
 taxonomy:
+  # Printed or model-returned name -> existing Paperless correspondent. For names that
+  # differ in more than spelling (brand vs. legal name, abbreviations, renamed
+  # companies); small typos are already caught by fuzzy matching.
   correspondent_aliases_file: correspondent-aliases.json
   storage_paths:
     household: "Household / Correspondent"

@@ -1,112 +1,156 @@
 # paperless-ai-extract
 
-Metadata extraction for [Paperless-ngx](https://docs.paperless-ngx.com/) with a
-local or remote LLM, from **page images**, OCR text, or both. It runs as a
-separate service that talks to Paperless only through its **REST API**. No
-Paperless source files are patched or mounted.
+[![CI](https://github.com/vtietz/paperless-ai-extract/actions/workflows/ci.yml/badge.svg)](https://github.com/vtietz/paperless-ai-extract/actions/workflows/ci.yml)
 
-What it extracts (each part is optional and configured per installation):
+A small sidecar container that lets a local or remote LLM fill in metadata for
+[Paperless-ngx](https://docs.paperless-ngx.com/) documents. It can read the
+**page image** (vision models), the OCR text, or both. It works only through
+the Paperless REST API: no patches, no mounted Paperless source, no extra web UI.
 
-- title, correspondent, document type, and storage path by document kind
-- a select-type custom field such as a household **Recipient**, with fail-closed
-  evidence checks and an optional second OCR reading of the address window
-- for articles: authors (long-text custom field), the journal as correspondent,
-  and the publication year as the created date
+It is deliberately **conservative**:
 
-## How it works
+- **Never overwrites.** Empty fields are filled. Values that are already set,
+  including your manual corrections, only get a *proposal*.
+- **Review happens inside Paperless.** Proposals appear as a document note
+  and a tag. Adding the tag `AI: apply` accepts them.
+- **Fail-closed evidence checks.** New correspondents, dates, journal names and
+  addressees must be backed by the document text. Otherwise they become a
+  proposal, not a fill.
+- **One engine for import and re-analysis.** A Paperless workflow tags new
+  documents. Adding the same tag by hand re-analyses a document.
 
-```
-Paperless workflow "Document Added" ──assign tag──▶  AI: pending
-                       user adds tag manually ──────▶  AI: pending   (re-analyse)
-                                                           │
-                                       paperless-ai-extract polls the tag
-                                                           ▼
-             download archive PDF ─▶ render page(s) ─▶ LLM (structured JSON)
-                                                           ▼
-                     validate evidence ─▶ plan: fill empty fields / propose others
-                                                           ▼
-                   PATCH fields, note with proposals, tags AI: proposal / AI: review
-                                                           │
-                     user adds AI: apply ──▶ stored proposal applied (if field unchanged)
-```
+It extracts the following; everything except the first three is optional:
 
-One engine and one rule set serve both import and manual re-analysis:
-
-| Situation | Default behaviour |
+| Field | Notes |
 |---|---|
-| First analysis, field empty, evidence OK | **fill** |
-| First analysis, field empty, evidence failed | fill a safe fallback (for example `Unassigned`) and **propose** the value |
-| Field already set (manually or earlier) | **propose** only; never overwritten |
-| Later re-analysis (`policy.rerun: propose`) | **propose** only |
-| Storage path | fill when empty; never proposed |
+| title, correspondent, document type | Matched against your existing taxonomy (aliases, exact, fuzzy). New entries can be created. |
+| tags | Chosen **only from existing tags** (optionally an allowlist), added and never removed. |
+| document date | Proposed by default, or set on the first analysis when the date is printed. |
+| storage path | Chosen by document kind (e.g. `household` / `article`). |
+| addressee / recipient | A select custom field (e.g. household member), validated against the address block. Configurable aliases and locale rules, plus an optional second OCR reading of the address window. |
+| articles | Authors (custom field), journal as correspondent, and publication year as the date. |
 
-An "empty" title means blank, or still equal to the uploaded file name.
-Proposals are written as a Paperless note and stored locally. Adding the
-`apply` tag accepts them. If the user edited a proposed field in the meantime,
-that field is skipped.
+### How it compares
 
-Extraction results are cached by file checksum and engine fingerprint (model,
-prompt, schema, input settings). Re-queuing an unchanged document costs no
-inference.
+[paperless-gpt](https://github.com/icereed/paperless-gpt) and
+[paperless-ai](https://github.com/clusterzx/paperless-ai) are larger, more
+feature-rich projects with their own web UIs (review screens, chat, OCR
+pipelines). Choose this project if you want a headless, minimal container whose
+review workflow is plain Paperless (notes, tags, workflows), and that never
+overwrites existing metadata.
 
-Paperless's own "Suggest" button is unaffected. It remains Paperless's native,
-text-only AI feature.
+## Quick start: add it to your Paperless Compose stack
 
-## Quick start
+1. In Paperless, create a user for the service, e.g. `ai-extract`. Give it these
+   permissions:
+   - view/change: Document
+   - view/add: Correspondent, Document type, Tag, Note
+   - view: Storage path, Custom field
 
-1. In Paperless, create an API user. A non-superuser is enough when documents
-   and taxonomy are unowned or shared with it. It needs:
-   - view/change on documents
-   - view/add on correspondents, document types and tags
-   - view on storage paths and custom fields
-   - add on notes
+   Create an API token for it (profile menu → API token).
+   *Documents owned by other users must be shared with this user, or use an
+   admin account.*
 
-   Then create its API token.
-2. Copy `examples/config.minimal.yaml` (or `examples/household/`) into a config
-   directory, adapt it, and write the prompt file.
-3. Run:
+2. Next to your Paperless `docker-compose.yml`, copy
+   [`examples/ai-extract.env.example`](examples/ai-extract.env.example) to
+   `ai-extract.env`. Set the token, the LLM endpoint and the model, and
+   uncomment any options you want. Keep this file out of Git. Then add the
+   service ([`examples/compose.yaml`](examples/compose.yaml)):
+
+```yaml
+services:
+  # ... webserver, db, broker from your existing paperless-ngx compose file
+  ai-extract:
+    image: ghcr.io/vtietz/paperless-ai-extract:0.1
+    restart: unless-stopped
+    depends_on: [webserver]
+    env_file: ai-extract.env
+    volumes:
+      - ./ai-extract:/data            # small cache and proposals (uid 1000)
+    stop_grace_period: 6m             # let a running request finish
+```
+
+   Minimal `ai-extract.env`:
 
 ```sh
-docker build -t paperless-ai-extract .
-docker run --rm -v $PWD/config:/config:ro -v $PWD/data:/data \
-  -e PAPERLESS_TOKEN=... paperless-ai-extract check --create-tags
-docker run --rm -v $PWD/config:/config:ro -v $PWD/data:/data \
-  -e PAPERLESS_TOKEN=... paperless-ai-extract analyse 123     # dry run, prints the plan
+PAPERLESS_URL=http://webserver:8000
+PAPERLESS_TOKEN=...
+LLM_PROVIDER=ollama                   # or openai (any OpenAI-compatible API)
+LLM_BASE_URL=http://ollama:11434      # openai: e.g. http://vllm:8000/v1
+LLM_MODEL=qwen3.5:4b                  # a vision model for the default image mode
+PAE__EXTRACTION__TAGS__ENABLED=true   # optional extras: any setting via PAE__SECTION__KEY
 ```
 
-4. Deploy with `examples/compose.yaml` (command `serve`).
-5. In Paperless, create a workflow (trigger *Document Added*) that assigns the
-   `AI: pending` tag.
+3. `docker compose up -d ai-extract`. Then run
+   `docker compose run --rm ai-extract check`; it creates the five `AI: …` tags.
+4. In Paperless, add a workflow: trigger **Document Added**, action
+   **Assignment** → tag `AI: pending`.
+
+Try it on an existing document first: add the tag `AI: pending` and wait for
+the note. A dry run that writes nothing:
+`docker compose run --rm ai-extract analyse <document id>`.
+
+> If you set `PAPERLESS_ALLOWED_HOSTS`, include the host name used in
+> `PAPERLESS_URL` (here `webserver`). Don't share your Paperless `env_file`
+> with this container: Paperless's own `PAPERLESS_URL` means something else.
+
+## Daily use
+
+| Tag | Meaning |
+|---|---|
+| `AI: pending` | queue: analyse (added by the workflow, or by you to re-analyse) |
+| `AI: proposal` | the note contains proposals |
+| `AI: apply` | you: accept all proposals of the latest note |
+| `AI: review` | something could not be verified (e.g. no addressee found) |
+| `AI: error` | gave up after retries; see the note; re-add `AI: pending` to retry |
+
+| Situation | Behaviour (default policy) |
+|---|---|
+| first analysis, field empty, evidence OK | **fill** |
+| first analysis, field empty, evidence missing | fill a safe fallback if configured, **propose** the value |
+| field already set | **propose** only |
+| later re-analysis | **propose** only |
+| tags | added only, from existing tags |
+
+A proposal is skipped when you edit the field before applying it. Extraction
+results are cached by file checksum and engine settings, so re-tagging an
+unchanged document costs no new inference.
+
+## Configuration
+
+Environment variables cover simple setups. For anything larger, mount a YAML
+file at `/config/config.yaml` (env vars still override it). See
+**[docs/configuration.md](docs/configuration.md)** and the
+[examples](examples/), including a household profile with a recipient field,
+address aliases and articles.
+
+| Variable | Meaning |
+|---|---|
+| `PAPERLESS_URL`, `PAPERLESS_TOKEN` (`_FILE`) | Paperless API |
+| `LLM_PROVIDER` | `ollama` (native API) or `openai` (OpenAI, vLLM, llama.cpp, LM Studio, LocalAI, LiteLLM, …) |
+| `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` (`_FILE`) | model endpoint |
+| `INPUT_MODE` | `image` (default), `text` or `image+text` |
+| `PAE__…` | any setting, e.g. `PAE__LLM__OPTIONS='{num_ctx: 8192}'` |
+
+A built-in prompt adapts to the enabled fields. Replace it with
+`extraction.prompt_file` when needed.
 
 ## Commands
 
 | Command | Purpose |
 |---|---|
-| `check [--create-tags]` | check Paperless auth, LLM/model, custom fields, tags and OCR tools |
+| `serve` | run the queue (default) |
+| `check [--create-tags]` | check Paperless, LLM/model, custom fields, tags, OCR tools |
 | `analyse ID… [--force] [--mode first_run\|rerun]` | dry run: print extraction and plan as JSON, **no writes** |
-| `process ID… [--force]` | process now, exactly as the queue would |
-| `serve [--once]` | run the tag-driven queue worker |
-| `health` | exit 0 if the worker heartbeat is fresh (container healthcheck) |
+| `process ID… [--force]` | process now, exactly like the queue |
+| `health` | container healthcheck (worker heartbeat) |
 
-## LLM backends
+## Hardware notes
 
-| `llm.provider` | Endpoint | Works with |
-|---|---|---|
-| `ollama` | `POST {base_url}/api/chat`, schema via `format`, images base64 | Ollama |
-| `openai` | `POST {base_url}/chat/completions`, `response_format: json_schema`, images as data URLs | OpenAI, vLLM, llama.cpp server, LM Studio, LocalAI, LiteLLM, Ollama `/v1` |
-
-`llm.options` is passed through: as Ollama `options`, or as extra body fields
-such as `temperature`/`max_tokens` for OpenAI-compatible servers. For servers
-without JSON-schema support, set `structured_output` to `json_object` or `none`.
-
-To add a backend, implement `ports.LLMClient` and register the class in
-`adapters/llm/__init__.py`.
-
-## Configuration
-
-See [docs/configuration.md](docs/configuration.md). Values support `${ENV}` and
-`${ENV:-default}`. Secrets can be read from files via `token_file` /
-`api_key_file`.
+Developed on a 4-core NAS with CPU-only Ollama: `qwen3.5:4b` takes about
+60–70 s per first-page image (1120 px, about 1,800 prompt tokens). That's fine
+for a background queue, but don't expect interactive speed. Text mode with a
+small instruct model is faster but less robust on letters and articles.
 
 ## Development
 
@@ -114,14 +158,20 @@ See [docs/configuration.md](docs/configuration.md). Values support `${ENV}` and
 docker build --target test -t paperless-ai-extract:test . && docker run --rm paperless-ai-extract:test
 ```
 
-Architecture and extension points: [docs/architecture.md](docs/architecture.md).
+Clean architecture: a pure domain (rules, planner), ports, adapters (Paperless,
+LLMs, Poppler/Tesseract, SQLite) and a composition root. See
+[docs/architecture.md](docs/architecture.md). Contributions welcome. New LLM
+backends implement one small interface.
 
 ## Limitations
 
-- Image mode analyses only the first `input.pages` pages.
-- Evidence rules are string checks against Paperless's OCR text. With
-  image-only extraction, values the OCR missed become proposals, not fills.
-- The address-window check supports only configured multi-person aliases on
-  portrait letters with a conventional upper-left address window. It uses two
-  Tesseract layout modes; it is not an independent confidence score.
-- Import latency is the polling interval (default 30 s) plus inference time.
+- Image mode analyses only the first `input.pages` pages (default 1).
+- Evidence checks compare against Paperless's OCR text. If OCR missed something
+  the vision model saw, the value becomes a proposal.
+- Address-block rules default to German/English conventions. Other locales
+  configure `extraction.recipient.address_rules`.
+- No web UI and no chat. Latency is the poll interval plus inference time.
+
+## License
+
+MIT

@@ -94,7 +94,9 @@ def make_taxonomy() -> Taxonomy:
         storage_paths=[Item(30, "Household"), Item(31, "Articles")],
         tags=[Item(i, name) for name, i in
               {"AI: pending": 101, "AI: apply": 102, "AI: proposal": 103,
-               "AI: review": 104, "AI: error": 105}.items()],
+               "AI: review": 104, "AI: error": 105}.items()]
+             + [Item(1, "Inbox", inbox=True), Item(40, "Steuer"), Item(41, "Versicherung"),
+                Item(42, "Strom")],
         custom_fields=[RECIPIENT_FIELD, AUTHORS_FIELD],
     )
 

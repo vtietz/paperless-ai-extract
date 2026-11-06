@@ -16,7 +16,9 @@ from ..domain.errors import ExtractError, UnsupportedInput
 from ..domain.evidence import confirmed_joint_address
 from ..domain.matching import compact
 from ..domain.models import Change, DocumentSnapshot, Extraction, Item, Plan, Taxonomy
-from ..domain.planner import DIRECT_FIELDS, LABELS, FieldAccess, note_text, plan_document
+from ..domain.messages import Messages
+from ..domain.planner import (DIRECT_FIELDS, FieldAccess, note_text, plan_document,
+                              selectable_tags)
 from ..domain.prompt import render_instructions, with_document_text
 from ..domain.schema import build_schema, parse_extraction
 from ..ports import AddressReader, DocumentStore, LLMClient, PageRenderer, StateStore
@@ -32,6 +34,7 @@ class Context:
     taxonomy: Taxonomy
     access: FieldAccess
     labels: list[str] | None
+    tag_names: list[str]
     schema: dict
     instructions: str
     fingerprint: str
@@ -57,7 +60,9 @@ class MetadataExtractor:
         self.address_reader = address_reader
         self.state = state
         self.aliases = config.correspondent_aliases()
-        self.template = config.extraction.prompt_file.read_text()
+        path = config.extraction.prompt_file
+        self.template = path.read_text() if path else None
+        self.msg = Messages(config.policy.notes_language)
 
     # -- context -----------------------------------------------------------
     def context(self, create_tags: bool | None = None) -> Context:
@@ -74,15 +79,19 @@ class MetadataExtractor:
                 raise ConfigError(f"recipient dropdown must contain {rc.unassigned!r}")
             if rc.shared and rc.shared not in labels:
                 raise ConfigError(f"recipient dropdown lacks shared option {rc.shared!r}")
-        schema = build_schema(config.extraction, labels)
-        instructions = render_instructions(config, self.template, labels)
+        tag_names = ([t.name for t in selectable_tags(config, taxonomy)]
+                     if config.extraction.tags.enabled else [])
+        if config.extraction.tags.enabled and not tag_names:
+            log.warning("tag extraction enabled but no selectable tags exist")
+        schema = build_schema(config.extraction, labels, tag_names)
+        instructions = render_instructions(config, self.template, labels, tag_names)
         fingerprint = hashlib.sha256(json.dumps({
             "engine": __version__, "llm": self.llm.describe(),
             "input": config.input.model_dump(mode="json"),
             "schema": schema, "instructions": instructions,
         }, sort_keys=True, default=str).encode()).hexdigest()[:16]
         create = config.queue.create_missing_tags if create_tags is None else create_tags
-        return Context(taxonomy, access, labels, schema, instructions, fingerprint,
+        return Context(taxonomy, access, labels, tag_names, schema, instructions, fingerprint,
                        self._tags(taxonomy, create))
 
     def _tags(self, taxonomy: Taxonomy, create: bool) -> dict[str, int]:
@@ -125,7 +134,8 @@ class MetadataExtractor:
         started = time.monotonic()
         result = self.llm.generate_json(prompt, images, ctx.schema)
         metrics = {**result.metrics, "seconds": round(time.monotonic() - started, 1)}
-        extraction = parse_extraction(result.content, self.config.extraction, ctx.labels)
+        extraction = parse_extraction(result.content, self.config.extraction, ctx.labels,
+                                      ctx.tag_names)
         self.state.store(doc.id, source_key, ctx.fingerprint, extraction.to_dict(), metrics)
         return extraction, False, metrics
 
@@ -147,7 +157,8 @@ class MetadataExtractor:
             if not rc.address_window.enabled:
                 return None
             readings = self.address_reader.read(download()[0])
-            return confirmed_joint_address(readings, rc.aliases) if readings else None
+            return (confirmed_joint_address(readings, rc.aliases, rc.address_rules)
+                    if readings else None)
 
         extraction, cached, metrics = self._extract(doc, ctx, force, download)
         plan = plan_document(self.config, extraction, doc, ctx.taxonomy, self.aliases,
@@ -170,8 +181,15 @@ class MetadataExtractor:
         fresh = self.store.document(doc_id)
         direct: dict = {}
         custom: dict = {}
+        add_tags: list[int] = []
         written = []
         for ch in changes:
+            if ch.field == "tags":   # additive: nothing to overwrite, nothing to check
+                missing = [t for t in ch.value if t not in fresh.tags and t not in add_tags]
+                if missing:
+                    add_tags += missing
+                    written.append(ch)
+                continue
             expected = ch.current if ch.action == "fill" else ch.expect
             if ctx.access.current(fresh, ch.field) != expected:
                 log.info("document %s: %s changed meanwhile, skipped", doc_id, ch.field)
@@ -184,6 +202,7 @@ class MetadataExtractor:
             written.append(ch)
         self.store.update_document(doc_id, direct)
         self.store.set_custom_fields(doc_id, custom)
+        self.store.modify_tags(doc_id, add_tags, [])
         return written
 
     def _note(self, doc_id: int, text: str):
@@ -209,8 +228,7 @@ class MetadataExtractor:
             (add if plan.review else remove).append(tags["review"])
         policy = self.config.policy.notes
         if policy == "always" or (policy == "proposals" and (plan.proposals or plan.info)):
-            label = "manual re-analysis" if plan.mode == "rerun" else "first analysis"
-            self._note(doc_id, note_text(plan, self.config.llm.model, label,
+            self._note(doc_id, note_text(plan, self.config.llm.model, self.msg,
                                          self.config.queue.tags.apply))
         self.store.modify_tags(doc_id, add, remove)
         self.state.success(doc_id)
@@ -224,17 +242,17 @@ class MetadataExtractor:
         remove = [tags[r] for r in ("apply", "proposal") if r in tags]
         stored = self.state.proposal(doc_id)
         if not stored:
-            self._note(doc_id, "AI: no stored proposal to apply; tag removed.")
+            self._note(doc_id, self.msg("no_proposal"))
             self.store.modify_tags(doc_id, [], remove)
             return []
         changes = [Change.from_dict(c) for c in stored]
         written = self._write(doc_id, changes, ctx)
         skipped = [c for c in changes if c not in written]
-        lines = ["Applied AI proposal: " + (", ".join(
-            f'{LABELS[c.field]} "{c.display}"' for c in written) or "nothing")]
+        labels = self.msg.labels
+        lines = [self.msg("applied", items=", ".join(
+            f'{labels[c.field]} "{c.display}"' for c in written) or self.msg("nothing"))]
         if skipped:
-            lines.append("Skipped (field edited since the proposal): "
-                         + ", ".join(LABELS[c.field] for c in skipped))
+            lines.append(self.msg("skipped", items=", ".join(labels[c.field] for c in skipped)))
         self._note(doc_id, "\n".join(lines))
         self.store.modify_tags(doc_id, [], remove)
         self.state.drop_proposal(doc_id)
@@ -250,8 +268,8 @@ class MetadataExtractor:
         if exc.retryable and attempts < self.config.queue.max_attempts:
             return False
         tags = ctx.tag_ids
-        self._note(doc_id, f"AI extraction gave up after {attempts} attempt(s): {message[:300]}\n"
-                           f'Add "{self.config.queue.tags.pending}" again to retry.')
+        self._note(doc_id, self.msg("gave_up", attempts=attempts, error=message[:300],
+                                    pending=self.config.queue.tags.pending))
         self.store.modify_tags(doc_id, [tags["error"]] if "error" in tags else [],
                                [tags["pending"]])
         self.state.reset_attempts(doc_id)

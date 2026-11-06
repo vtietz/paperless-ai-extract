@@ -37,7 +37,9 @@ def test_run_once_writes_heartbeat(build, config, tmp_path):
     assert float(beat.read_text()) > 0
 
 
-def test_missing_queue_tags_fail_the_cycle_not_the_process(build, config, taxonomy):
+def test_missing_queue_tags_fail_the_cycle_not_the_process(build, config_factory, taxonomy):
+    cfg = config_factory("queue: {create_missing_tags: false}\n")
     taxonomy.tags.clear()
-    extractor, _ = build([letter_doc()], FakeLLM(answer()))
-    QueueWorker(extractor, config.queue).run(once=True, install_signals=False)
+    extractor, store = build([letter_doc()], FakeLLM(answer()), cfg=cfg)
+    QueueWorker(extractor, cfg.queue).run(once=True, install_signals=False)
+    assert store.writes == []

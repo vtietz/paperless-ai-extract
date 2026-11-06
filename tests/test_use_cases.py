@@ -157,7 +157,7 @@ def test_permanent_failure_gives_up_immediately(build):
 def test_missing_tags_are_created_only_when_allowed(build, taxonomy):
     taxonomy.tags.clear()
     extractor, store = build([letter_doc()], FakeLLM(answer()))
-    assert extractor.context().tag_ids == {}
+    assert extractor.context(create_tags=False).tag_ids == {}
     ids = extractor.context(create_tags=True).tag_ids
     assert set(ids) == {"pending", "apply", "proposal", "review", "error"}
     assert all(op[0] == "create" and op[1] == "tags" for op in store.writes)

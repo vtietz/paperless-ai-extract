@@ -102,7 +102,7 @@ class AddressWindowConfig(Strict):
     """Second local OCR reading of a conventional address window (portrait PDF).
 
     Used only to confirm configured multi-person aliases that the model chose
-    but the document text could not corroborate.
+    but the document text could not corroborate. Defaults fit DIN 5008 letters.
     """
     enabled: bool = False
     languages: str = "deu+eng"
@@ -116,7 +116,21 @@ class AddressWindowConfig(Strict):
     max_aspect: float = 1.8
 
 
+class AddressRulesConfig(Strict):
+    """Locale rules for recognising a postal address block (defaults: German + English)."""
+    # A line counts as "city line" when it matches this regular expression.
+    postal_code: str = r"\b(?:D[ -]*)?\d{5}\s*[^\W\d_]"
+    # A street line ends with a house number.
+    street_number: str = r"\d+[a-z]?\s*$"
+    salutations: list[str] = Field(default_factory=lambda: [
+        "Frau", "Herr", "Herrn", "Familie", "Mr", "Mrs", "Ms", "Mx"])
+    sender_labels: list[str] = Field(default_factory=lambda: [
+        "Absender", "Auftraggeber", "Sender", "From"])
+    name_joiners: list[str] = Field(default_factory=lambda: ["&", "und", "and"])
+
+
 class RecipientConfig(Strict):
+    """A select custom field filled with the addressee (e.g. household member)."""
     enabled: bool = False
     custom_field: str = "Recipient"
     unassigned: str = "Unassigned"
@@ -124,10 +138,12 @@ class RecipientConfig(Strict):
     shared_keywords: list[str] = Field(default_factory=list)
     # canonical dropdown label -> printed variants that count as that label
     aliases: dict[str, list[str]] = Field(default_factory=dict)
+    address_rules: AddressRulesConfig = Field(default_factory=AddressRulesConfig)
     address_window: AddressWindowConfig = Field(default_factory=AddressWindowConfig)
 
 
 class ArticleConfig(Strict):
+    """Optional profile for journal/magazine articles."""
     enabled: bool = False
     kind: str = "article"
     authors_field: str | None = "Authors"
@@ -136,12 +152,33 @@ class ArticleConfig(Strict):
     require_text_evidence: bool = True
 
 
+class TagsConfig(Strict):
+    """Tags chosen from existing Paperless tags only (controlled vocabulary)."""
+    enabled: bool = False
+    # Candidate tag names; empty = all tags except inbox and queue tags.
+    allowed: list[str] = Field(default_factory=list)
+    excluded: list[str] = Field(default_factory=list)
+    max_tags: int = Field(3, ge=1, le=10)
+
+
+class DocumentDateConfig(Strict):
+    """The document's own date (Paperless "created")."""
+    enabled: bool = False
+    # Paperless already guesses a date at import. "propose" never changes it;
+    # "fill" replaces it on the first analysis when the year is printed.
+    first_run: Literal["propose", "fill"] = "propose"
+
+
 class ExtractionConfig(Strict):
-    prompt_file: Path
+    # None = built-in prompt (adapts to the enabled features).
+    prompt_file: Path | None = None
     kinds: list[str] = Field(default_factory=lambda: ["document"])
     title_max_length: int = 128
+    language: str | None = None   # e.g. "German"; None = language of the document
     recipient: RecipientConfig = Field(default_factory=RecipientConfig)
     articles: ArticleConfig = Field(default_factory=ArticleConfig)
+    tags: TagsConfig = Field(default_factory=TagsConfig)
+    document_date: DocumentDateConfig = Field(default_factory=DocumentDateConfig)
 
     @model_validator(mode="after")
     def _kinds(self):
@@ -165,18 +202,19 @@ class TaxonomyConfig(Strict):
 
 
 FieldName = Literal["title", "correspondent", "document_type", "storage_path",
-                    "created", "recipient", "authors"]
+                    "created", "recipient", "authors", "tags"]
 
 
 class PolicyConfig(Strict):
     fields: list[FieldName] = Field(default_factory=lambda: [
         "title", "correspondent", "document_type", "storage_path",
-        "created", "recipient", "authors"])
+        "created", "recipient", "authors", "tags"])
     # first_run: the service has never processed this document before.
     first_run: Literal["fill_empty", "propose"] = "fill_empty"
     rerun: Literal["fill_empty", "propose"] = "propose"
     title_empty_if_filename: bool = True
     notes: Literal["always", "proposals", "never"] = "proposals"
+    notes_language: Literal["en", "de"] = "en"
 
 
 class TagConfig(Strict):
@@ -192,7 +230,7 @@ class QueueConfig(Strict):
     batch_size: int = 10
     max_attempts: int = 3
     retry_delay: float = 300
-    create_missing_tags: bool = False
+    create_missing_tags: bool = True
     tags: TagConfig = Field(default_factory=TagConfig)
 
 
@@ -205,7 +243,7 @@ class Config(Strict):
     paperless: PaperlessConfig
     llm: LLMConfig
     input: InputConfig = Field(default_factory=InputConfig)
-    extraction: ExtractionConfig
+    extraction: ExtractionConfig = Field(default_factory=ExtractionConfig)
     taxonomy: TaxonomyConfig = Field(default_factory=TaxonomyConfig)
     policy: PolicyConfig = Field(default_factory=PolicyConfig)
     queue: QueueConfig = Field(default_factory=QueueConfig)
@@ -231,17 +269,75 @@ def _resolve_paths(model: BaseModel, base: Path) -> None:
             _resolve_paths(value, base)
 
 
-def load_config(path: str | Path) -> Config:
-    path = Path(path)
+# Convenience variables for container deployments without a config file.
+ENV_SHORTCUTS = {
+    "PAPERLESS_URL": ("paperless", "url"),
+    "PAPERLESS_TOKEN": ("paperless", "token"),
+    "PAPERLESS_TOKEN_FILE": ("paperless", "token_file"),
+    "LLM_PROVIDER": ("llm", "provider"),
+    "LLM_BASE_URL": ("llm", "base_url"),
+    "LLM_MODEL": ("llm", "model"),
+    "LLM_API_KEY": ("llm", "api_key"),
+    "LLM_API_KEY_FILE": ("llm", "api_key_file"),
+    "INPUT_MODE": ("input", "mode"),
+}
+# Any setting: PAE__<SECTION>__<KEY>[__<SUBKEY>...]=<YAML value>,
+# e.g. PAE__EXTRACTION__TAGS__ENABLED=true or PAE__LLM__OPTIONS='{num_ctx: 8192}'.
+ENV_PREFIX = "PAE__"
+
+
+def _set(tree: dict, keys: list[str], value) -> None:
+    for key in keys[:-1]:
+        node = tree.get(key)
+        if not isinstance(node, dict):
+            node = tree[key] = {}
+        tree = node
+    tree[keys[-1]] = value
+
+
+def _apply_env(raw: dict, environ: dict) -> dict:
+    for name, keys in ENV_SHORTCUTS.items():
+        if environ.get(name):
+            _set(raw, list(keys), environ[name])
+    for name, value in sorted(environ.items()):
+        if name.startswith(ENV_PREFIX) and len(name) > len(ENV_PREFIX):
+            keys = [part.lower() for part in name[len(ENV_PREFIX):].split("__") if part]
+            try:
+                parsed = yaml.safe_load(value)
+            except yaml.YAMLError:
+                parsed = value
+            # Only explicit [..] or {..} become collections; "AI: pending" stays a string.
+            if isinstance(parsed, (dict, list)) and not value.lstrip().startswith(("{", "[")):
+                parsed = value
+            if value.lstrip().startswith(("{", "[")) and isinstance(parsed, str):
+                raise ConfigError(f"invalid YAML value in {name}")
+            _set(raw, keys, parsed)
+    return raw
+
+
+def load_config(path: str | Path | None, environ: dict | None = None) -> Config:
+    """Load YAML (optional) and apply environment overrides; env wins."""
+    environ = dict(os.environ if environ is None else environ)
+    raw: dict = {}
+    base = Path.cwd()
+    if path is not None:
+        path = Path(path)
+        if path.exists():
+            try:
+                raw = yaml.safe_load(path.read_text()) or {}
+            except OSError as exc:
+                raise ConfigError(f"cannot read config {path}: {exc.strerror}") from None
+            except yaml.YAMLError as exc:
+                raise ConfigError(f"invalid YAML in {path}: {exc}") from None
+            base = path.parent.resolve()
+        elif not any(environ.get(n) for n in ENV_SHORTCUTS) and not any(
+                n.startswith(ENV_PREFIX) for n in environ):
+            raise ConfigError(f"config {path} not found and no environment configuration set")
+    if not isinstance(raw, dict):
+        raise ConfigError("config root must be a mapping")
     try:
-        raw = yaml.safe_load(path.read_text()) or {}
-    except OSError as exc:
-        raise ConfigError(f"cannot read config {path}: {exc.strerror}") from None
-    except yaml.YAMLError as exc:
-        raise ConfigError(f"invalid YAML in {path}: {exc}") from None
-    try:
-        config = Config.model_validate(_expand(raw))
+        config = Config.model_validate(_apply_env(_expand(raw), environ))
     except ValidationError as exc:
-        raise ConfigError(f"invalid config {path}:\n{exc}") from None
-    _resolve_paths(config, path.parent.resolve())
+        raise ConfigError(f"invalid configuration:\n{exc}") from None
+    _resolve_paths(config, base)
     return config

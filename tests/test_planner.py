@@ -1,5 +1,6 @@
 """Policy rules of the pure planner."""
 from paperless_ai_extract.domain.models import Extraction
+from paperless_ai_extract.domain.messages import Messages
 from paperless_ai_extract.domain.planner import note_text, plan_document
 
 from conftest import AUTHORS_FIELD, JOINT, LETTER, RECIPIENT_FIELD, letter_doc
@@ -144,6 +145,6 @@ def test_policy_field_selection(config_factory, taxonomy):
 
 def test_note_lists_proposals_and_fills(config, taxonomy):
     doc = letter_doc(title="Meine Abrechnung")
-    text = note_text(plan(config, taxonomy, extraction(), doc), "m", "first analysis", "AI: apply")
+    text = note_text(plan(config, taxonomy, extraction(), doc), "m", Messages("en"), "AI: apply")
     assert 'Title: "Meine Abrechnung" -> "Jahresabrechnung Strom 2025"' in text
     assert "Filled automatically:" in text and '"AI: apply"' in text

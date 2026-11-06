@@ -12,14 +12,21 @@ COPY src ./src
 FROM base AS test
 RUN pip install --no-cache-dir ".[test]"
 COPY tests ./tests
+COPY examples ./examples
 CMD ["python", "-m", "pytest", "-q"]
 
 FROM base AS runtime
-RUN pip install --no-cache-dir . && useradd --system --uid 1000 --home-dir /data extractor
+LABEL org.opencontainers.image.source="https://github.com/vtietz/paperless-ai-extract" \
+      org.opencontainers.image.description="LLM metadata extraction for Paperless-ngx via its REST API" \
+      org.opencontainers.image.licenses="MIT"
+RUN pip install --no-cache-dir . \
+ && useradd --system --uid 1000 --home-dir /data extractor \
+ && mkdir -p /data /config && chown extractor /data
 USER extractor
 VOLUME ["/data"]
 ENV PYTHONUNBUFFERED=1
-ENTRYPOINT ["paperless-ai-extract", "--config", "/config/config.yaml"]
+ENV PAE_CONFIG=/config/config.yaml
+ENTRYPOINT ["paperless-ai-extract"]
 CMD ["serve"]
-HEALTHCHECK --interval=60s --timeout=10s --start-period=60s \
-  CMD ["paperless-ai-extract", "--config", "/config/config.yaml", "health"]
+HEALTHCHECK --interval=60s --timeout=10s --start-period=120s \
+  CMD ["paperless-ai-extract", "health"]

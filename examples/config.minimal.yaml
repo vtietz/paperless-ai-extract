@@ -1,6 +1,8 @@
-# Minimal setup: title, correspondent and document type from the first page image.
+# Minimal YAML setup (the same works with environment variables only).
+# Built-in prompt; title, correspondent, document type, tags from existing tags,
+# and document-date proposals from the first page image.
 paperless:
-  url: http://paperless:8000
+  url: http://webserver:8000
   token: ${PAPERLESS_TOKEN}
 llm:
   provider: ollama
@@ -8,8 +10,6 @@ llm:
   model: qwen3.5:4b
   options: {num_ctx: 4096, temperature: 0.1}
 extraction:
-  prompt_file: prompt.minimal.txt
-policy:
-  fields: [title, correspondent, document_type]
-queue:
-  create_missing_tags: true
+  language: English
+  tags: {enabled: true, max_tags: 3}
+  document_date: {enabled: true}

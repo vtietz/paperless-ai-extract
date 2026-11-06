@@ -11,7 +11,7 @@ application/   use_cases.MetadataExtractor   analyse · process · apply_proposa
                  │ depends on
                  ▼
 ports.py       DocumentStore · LLMClient · PageRenderer · AddressReader · StateStore
-domain/        models · schema · prompt · matching · evidence · planner   (pure, no I/O)
+domain/        models · schema · prompt · matching · evidence · planner · messages   (pure, no I/O)
                  ▲ implemented by
 adapters/      paperless.PaperlessClient          REST API v10
                llm.OllamaClient / OpenAICompatibleClient
