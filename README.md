@@ -90,6 +90,21 @@ Try it on an existing document first: add the tag `AI: pending` and wait for
 the note. A dry run that writes nothing:
 `docker compose run --rm ai-extract analyse <document id>`.
 
+### Alternative: a separate Compose project
+
+The service has no dependency on Paperless's internals, so it can also run as
+its own project. This suits independent updates, its own config and data
+directory, or a Paperless managed by another tool (Unraid templates, Portainer,
+etc.). Both projects then share a Docker network, and `PAPERLESS_URL` uses a
+name that resolves on it. See
+[`examples/compose.separate.yaml`](examples/compose.separate.yaml).
+
+| | Inside the Paperless project | Separate project |
+|---|---|---|
+| setup | one service block | shared network + own directory |
+| `PAPERLESS_URL` | `http://webserver:8000` | container name or alias on the shared network |
+| updates | `docker compose pull ai-extract` in the Paperless project | independent of Paperless |
+
 > If you set `PAPERLESS_ALLOWED_HOSTS`, include the host name used in
 > `PAPERLESS_URL` (here `webserver`). Don't share your Paperless `env_file`
 > with this container: Paperless's own `PAPERLESS_URL` means something else.

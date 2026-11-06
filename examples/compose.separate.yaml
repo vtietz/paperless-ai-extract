@@ -1,0 +1,28 @@
+# Alternative: run paperless-ai-extract as its own compose project, next to an
+# existing Paperless (and optionally Ollama) project.
+#
+# 1. Create a shared network once:      docker network create paperless-ai
+# 2. Attach Paperless's webserver to it in its compose file:
+#      services:
+#        webserver:
+#          networks: [default, paperless-ai]
+#      networks:
+#        paperless-ai: {external: true}
+#    (attach your Ollama/LLM server the same way, or use its LAN address)
+# 3. In ai-extract.env use names that resolve on the shared network, e.g.
+#      PAPERLESS_URL=http://paperless-webserver-1:8000   # container name or a network alias
+#      LLM_BASE_URL=http://ollama:11434
+name: paperless-ai-extract
+services:
+  ai-extract:
+    image: ghcr.io/vtietz/paperless-ai-extract:0.1
+    restart: unless-stopped
+    env_file: ai-extract.env
+    volumes:
+      - ./data:/data
+      # - ./config:/config:ro            # optional config.yaml, prompt, aliases
+    stop_grace_period: 6m
+    networks: [paperless-ai]
+networks:
+  paperless-ai:
+    external: true
