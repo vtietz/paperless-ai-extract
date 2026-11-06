@@ -9,6 +9,7 @@ plain-text template (Python string.Template syntax) with these placeholders:
   ${field_instructions}  generated instructions for every enabled field
   ${kinds}               JSON list of configured kinds
   ${tag_options}         JSON list of selectable tag names
+  ${document_type_options} JSON list of existing document types offered to the model
   ${recipient_options}   JSON list of the recipient dropdown labels
   ${recipient_aliases}   "Alias: printed => canonical" lines
 
@@ -58,8 +59,19 @@ def _aliases(config: Config) -> str:
         for variant in variants)
 
 
+def _document_type_line(config: Config, language: str, type_names: list[str] | None) -> str:
+    if not type_names:
+        return f"- document_types: one short, general document type{language}, or []."
+    listed = json.dumps(type_names, ensure_ascii=False)
+    if config.taxonomy.create_document_types:
+        return (f"- document_types: the best fitting existing type from {listed}; only if "
+                f"none fits, one new short, general type{language}; or [].")
+    return f"- document_types: one type from {listed}, or [] if none fits."
+
+
 def field_instructions(config: Config, recipient_labels: list[str] | None,
-                       tag_names: list[str] | None) -> str:
+                       tag_names: list[str] | None,
+                       type_names: list[str] | None = None) -> str:
     ex = config.extraction
     language = f" in {ex.language}" if ex.language else " in the document's language"
     lines = []
@@ -77,7 +89,7 @@ def field_instructions(config: Config, recipient_labels: list[str] | None,
         f"- title: concise title{language}: document type, sender and subject or period. "
         "Join words split only by a line wrap; keep genuine hyphens.",
         "- correspondents: the one sending organisation or person as printed, or [].",
-        f"- document_types: one short, general document type{language}, or [].",
+        _document_type_line(config, language, type_names),
     ]
     if ex.tags.enabled and tag_names:
         lines.append(f"- tags: up to {ex.tags.max_tags} tags that clearly apply, chosen only "
@@ -101,13 +113,15 @@ def field_instructions(config: Config, recipient_labels: list[str] | None,
 
 def render_instructions(config: Config, template_text: str | None,
                         recipient_labels: list[str] | None,
-                        tag_names: list[str] | None = None) -> str:
+                        tag_names: list[str] | None = None,
+                        type_names: list[str] | None = None) -> str:
     return Template(template_text or DEFAULT_TEMPLATE).safe_substitute(
         source_description=source_description(config.input.mode, config.input.pages),
         input_hint=input_hint(config.input.mode),
-        field_instructions=field_instructions(config, recipient_labels, tag_names),
+        field_instructions=field_instructions(config, recipient_labels, tag_names, type_names),
         kinds=json.dumps(config.extraction.kinds, ensure_ascii=False),
         tag_options=json.dumps(tag_names or [], ensure_ascii=False),
+        document_type_options=json.dumps(type_names or [], ensure_ascii=False),
         recipient_options=json.dumps(recipient_labels or [], ensure_ascii=False),
         recipient_aliases=_aliases(config),
     ).strip()

@@ -28,7 +28,7 @@ It extracts the following; everything except the first three is optional:
 
 | Field | Notes |
 |---|---|
-| title, correspondent, document type | Matched against your existing taxonomy (aliases, exact, fuzzy). New entries can be created. |
+| title, correspondent, document type | Matched against your existing taxonomy (aliases, exact, fuzzy). The model sees your document types and picks the best fit. New entries can be created, or switched off. |
 | tags | Chosen **only from existing tags** (optionally an allowlist), added and never removed. |
 | document date | Proposed by default, or set on the first analysis when the date is printed. |
 | storage path | Chosen by document kind (e.g. `household` / `article`). |
@@ -66,7 +66,7 @@ existing metadata alone.
 services:
   # ... webserver, db, broker from your existing paperless-ngx compose file
   ai-extract:
-    image: ghcr.io/vtietz/paperless-ai-extract:0.1
+    image: ghcr.io/vtietz/paperless-ai-extract:0.2
     restart: unless-stopped
     depends_on: [webserver]
     env_file: ai-extract.env

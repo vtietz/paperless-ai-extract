@@ -12,8 +12,11 @@ DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
 
 
 def build_schema(config: ExtractionConfig, recipient_labels: list[str] | None,
-                 tag_names: list[str] | None = None) -> dict:
-    """Property order matters to small models; the household/article order follows
+                 tag_names: list[str] | None = None,
+                 type_enum: list[str] | None = None) -> dict:
+    """type_enum restricts document_types to existing names (creation disabled).
+
+    Property order matters to small models; the household/article order follows
     the validated pilot, optional generic fields are inserted after document type."""
     props: dict = {}
     if len(config.kinds) > 1:
@@ -26,8 +29,9 @@ def build_schema(config: ExtractionConfig, recipient_labels: list[str] | None,
     props["title"] = {"type": "string", "maxLength": config.title_max_length}
     props["correspondents"] = {"type": "array", "maxItems": 1,
                                "items": {"type": "string", "maxLength": 128}}
-    props["document_types"] = {"type": "array", "maxItems": 1,
-                               "items": {"type": "string", "maxLength": 64}}
+    type_item = ({"type": "string", "enum": list(type_enum)} if type_enum
+                 else {"type": "string", "maxLength": 64})
+    props["document_types"] = {"type": "array", "maxItems": 1, "items": type_item}
     if config.tags.enabled and tag_names:
         props["tags"] = {"type": "array", "maxItems": config.tags.max_tags,
                          "items": {"type": "string", "enum": list(tag_names)}}

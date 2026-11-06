@@ -161,6 +161,16 @@ class TagsConfig(Strict):
     max_tags: int = Field(3, ge=1, le=10)
 
 
+class DocumentTypesConfig(Strict):
+    """Existing document types offered to the model as its choices."""
+    # List the existing types in the prompt; the model picks the best fit and may
+    # name a new type only when taxonomy.create_document_types is true.
+    offer_existing: bool = True
+    excluded: list[str] = Field(default_factory=list)
+    # Larger taxonomies are not listed (prompt size); matching still applies.
+    max_listed: int = Field(150, ge=1)
+
+
 class DocumentDateConfig(Strict):
     """The document's own date (Paperless "created")."""
     enabled: bool = False
@@ -178,6 +188,7 @@ class ExtractionConfig(Strict):
     recipient: RecipientConfig = Field(default_factory=RecipientConfig)
     articles: ArticleConfig = Field(default_factory=ArticleConfig)
     tags: TagsConfig = Field(default_factory=TagsConfig)
+    document_types: DocumentTypesConfig = Field(default_factory=DocumentTypesConfig)
     document_date: DocumentDateConfig = Field(default_factory=DocumentDateConfig)
 
     @model_validator(mode="after")
@@ -192,6 +203,8 @@ class ExtractionConfig(Strict):
 class TaxonomyConfig(Strict):
     correspondent_aliases: dict[str, str] = Field(default_factory=dict)
     correspondent_aliases_file: Path | None = None
+    # model name -> existing document type, e.g. {"Slide deck": "Presentation"}
+    document_type_aliases: dict[str, str] = Field(default_factory=dict)
     create_correspondents: bool = True
     create_document_types: bool = True
     new_correspondent_requires_text_evidence: bool = True

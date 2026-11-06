@@ -62,6 +62,10 @@ extraction:
     allowed: []                       # tag names; empty = all except inbox and queue tags
     excluded: []
     max_tags: 3
+  document_types:                     # existing types offered to the model
+    offer_existing: true              # list them in the prompt; the model picks the best fit
+    excluded: []                      # type names never offered
+    max_listed: 150                   # more types than this: not listed (prompt size)
   document_date:
     enabled: false
     first_run: propose                # propose | fill (fill only when the date is printed)
@@ -99,8 +103,9 @@ extraction:
 taxonomy:
   correspondent_aliases: {}           # printed/model name -> existing correspondent, e.g. {"Telekom": "Telekom Deutschland GmbH"}
   correspondent_aliases_file: null    # JSON object with the same shape
+  document_type_aliases: {}           # model name -> existing type, e.g. {"Slide deck": "Presentation"}
   create_correspondents: true         # created unowned (shared), like Paperless's AI workflow
-  create_document_types: true
+  create_document_types: true         # false: the model may only choose listed types
   new_correspondent_requires_text_evidence: true
   fuzzy_threshold: 0.8                # difflib cutoff; >= 1 disables fuzzy matching
   storage_paths: {}                   # kind: "Storage path name" (only when empty)
@@ -144,6 +149,7 @@ good start for most setups. A custom `prompt_file` uses Python
 | `${input_hint}` | layout hint for image modes, empty for text |
 | `${kinds}` | JSON list of `extraction.kinds` |
 | `${tag_options}` | JSON list of selectable tags |
+| `${document_type_options}` | JSON list of existing document types offered to the model |
 | `${recipient_options}` | JSON list of dropdown labels |
 | `${recipient_aliases}` | `Alias: printed => canonical` lines |
 
@@ -151,7 +157,9 @@ The model returns JSON with the fields `kind`, `authors`, `publication_year`,
 `title`, `correspondents` (0–1), `document_types` (0–1), `tags`,
 `document_date`, `addressee_text` and `recipient`. Each field is present only
 when its feature is enabled. Tags are an enum of the selectable tags; unknown
-tags are dropped.
+tags are dropped. Document types are an enum of the listed types only when
+`create_document_types` is false; otherwise the model may name a new type,
+which is matched (alias, exact, fuzzy) and created only if nothing matches.
 
 ## Locale rules for addresses
 

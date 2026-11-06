@@ -25,7 +25,9 @@ For an ARTICLE:
 
 For HOUSEHOLD paperwork:
 - title: concise German title starting with document type, sender, relevant period.
-- correspondents: one sender organization. document_types: one German type.
+- correspondents: one sender organization.
+- document_types: the best fitting existing type from ${document_type_options};
+  only if none fits, one new short, general German type.
 - authors: []. publication_year: null.
 - recipient: one EXACT allowed household name, based on the addressee/address.
   Never use the sender, signatory or a person merely mentioned in the body.

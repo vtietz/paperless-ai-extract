@@ -36,6 +36,17 @@ def selectable_tags(config: Config, taxonomy: Taxonomy) -> list[Item]:
     return sorted(usable, key=lambda t: t.name.casefold())
 
 
+def selectable_document_types(config: Config, taxonomy: Taxonomy) -> list[str]:
+    """Existing document types offered to the model ([] = not listed)."""
+    cfg = config.extraction.document_types
+    if not cfg.offer_existing:
+        return []
+    excluded = set(cfg.excluded)
+    names = sorted({t.name for t in taxonomy.document_types if t.name not in excluded},
+                   key=str.casefold)
+    return names if len(names) <= cfg.max_listed else []
+
+
 class FieldAccess:
     """Read current values of the logical fields from a snapshot."""
 
@@ -132,14 +143,15 @@ def build_candidates(config: Config, ex: Extraction, doc: DocumentSnapshot,
         candidates.append(cand)
 
     if ex.document_type:
-        match = find(ex.document_type, taxonomy.document_types, tax_cfg.fuzzy_threshold)
+        type_name = apply_alias(ex.document_type, tax_cfg.document_type_aliases)
+        match = find(type_name, taxonomy.document_types, tax_cfg.fuzzy_threshold)
         if match:
             candidates.append(Candidate("document_type", match.id, match.name))
         else:
             allowed = tax_cfg.create_document_types
             candidates.append(Candidate(
-                "document_type", None, msg("new", name=ex.document_type),
-                create=("document_types", ex.document_type), verified=allowed,
+                "document_type", None, msg("new", name=type_name),
+                create=("document_types", type_name), verified=allowed,
                 reason="" if allowed else msg("reason_creation_disabled")))
 
     path_name = tax_cfg.storage_paths.get(ex.kind)

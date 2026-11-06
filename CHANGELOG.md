@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 — 2026-11-06
+
+- The model now sees the existing document types and picks the best fit
+  (`extraction.document_types`, on by default; `excluded`, `max_listed`). It names
+  a new type only when `taxonomy.create_document_types` is true; when false, the
+  answer is restricted to the listed types by the JSON schema.
+- `taxonomy.document_type_aliases` maps names the model uses to an existing type.
+- Custom prompts: new placeholder `${document_type_options}`. Prompts that don't
+  use it (and don't use `${field_instructions}`) behave as before.
+- Changing the document types changes the prompt, so cached extractions are not
+  reused for documents queued again afterwards.
+
 ## 0.1.1 — 2026-11-06
 
 Fixes from an external review:

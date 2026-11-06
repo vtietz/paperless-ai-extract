@@ -18,7 +18,7 @@ from ..domain.matching import compact
 from ..domain.models import Change, DocumentSnapshot, Extraction, Item, Plan, Taxonomy
 from ..domain.messages import Messages
 from ..domain.planner import (DIRECT_FIELDS, FieldAccess, note_text, plan_document,
-                              selectable_tags)
+                              selectable_document_types, selectable_tags)
 from ..domain.prompt import render_instructions, with_document_text
 from ..domain.schema import build_schema, parse_extraction
 from ..ports import AddressReader, DocumentStore, LLMClient, PageRenderer, StateStore
@@ -84,8 +84,14 @@ class MetadataExtractor:
                      if config.extraction.tags.enabled else [])
         if config.extraction.tags.enabled and not tag_names:
             log.warning("tag extraction enabled but no selectable tags exist")
-        schema = build_schema(config.extraction, labels, tag_names)
-        instructions = render_instructions(config, self.template, labels, tag_names)
+        type_names = selectable_document_types(config, taxonomy)
+        if (config.extraction.document_types.offer_existing and not type_names
+                and taxonomy.document_types):
+            log.warning("more than %d document types: not listed in the prompt",
+                        config.extraction.document_types.max_listed)
+        type_enum = None if config.taxonomy.create_document_types else type_names
+        schema = build_schema(config.extraction, labels, tag_names, type_enum)
+        instructions = render_instructions(config, self.template, labels, tag_names, type_names)
         fingerprint = hashlib.sha256(json.dumps({
             "engine": __version__, "llm": self.llm.describe(),
             "input": config.input.model_dump(mode="json"),
