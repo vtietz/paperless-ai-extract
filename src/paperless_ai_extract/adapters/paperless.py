@@ -16,7 +16,6 @@ def snapshot_from_api(data: dict) -> DocumentSnapshot:
         original_file_name=data.get("original_file_name"),
         correspondent=data.get("correspondent"),
         document_type=data.get("document_type"),
-        storage_path=data.get("storage_path"),
         created=data.get("created"),
         tags=list(data.get("tags") or []),
         content=data.get("content") or "",
@@ -67,7 +66,6 @@ class PaperlessClient:
         return Taxonomy(
             correspondents=items("/api/correspondents/"),
             document_types=items("/api/document_types/"),
-            storage_paths=items("/api/storage_paths/"),
             tags=items("/api/tags/"),
             custom_fields=self._all("/api/custom_fields/"),
         )

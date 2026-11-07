@@ -36,6 +36,5 @@ taxonomy:
   # differ in more than spelling (brand vs. legal name, abbreviations, renamed
   # companies); small typos are already caught by fuzzy matching.
   correspondent_aliases_file: correspondent-aliases.json
-  storage_paths:
-    household: "Household / Correspondent"
-    article: Articles
+# Storage paths: global PAPERLESS_FILENAME_FORMAT (Recipient/correspondent/...) for
+# everything, plus a Paperless workflow "document type Article -> storage path Articles".

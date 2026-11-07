@@ -1,3 +1,3 @@
 """LLM metadata extraction for Paperless-ngx through supported interfaces only."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

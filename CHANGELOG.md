@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 — 2026-11-07
+
+- **Removed:** storage path handling (`taxonomy.storage_paths`, policy field
+  `storage_path`). Use `PAPERLESS_FILENAME_FORMAT` for the general scheme and a
+  Paperless workflow (filter by document type, assign storage path) for
+  exceptions; it is visible and editable in Paperless and also runs on manual
+  changes. Old configs with `storage_paths` fail with an explanatory message.
+  The service user no longer needs to view storage paths.
+
 ## 0.3.0 — 2026-11-07
 
 - Correspondent shortlist: existing correspondents whose name (or alias) occurs

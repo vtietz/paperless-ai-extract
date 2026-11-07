@@ -30,7 +30,7 @@ def client(routes):
 def test_headers_and_document_mapping():
     paperless, api = client({("GET", "/api/documents/7/"): {
         "id": 7, "title": "T", "original_file_name": "a.pdf", "correspondent": None,
-        "document_type": 3, "storage_path": None, "created": "2026-01-02", "tags": [1],
+        "document_type": 3, "created": "2026-01-02", "tags": [1],
         "content": "text", "custom_fields": [{"field": 1, "value": "opt"}], "notes": []}})
     doc = paperless.document(7)
     assert doc.custom_fields == {1: "opt"} and doc.document_type == 3 and doc.created == "2026-01-02"
@@ -47,7 +47,6 @@ def test_taxonomy_follows_pagination():
     empty = {"results": [], "next": None}
     paperless, _ = client({("GET", "/api/correspondents/"): correspondents,
                            ("GET", "/api/document_types/"): empty,
-                           ("GET", "/api/storage_paths/"): empty,
                            ("GET", "/api/tags/"): empty,
                            ("GET", "/api/custom_fields/"): empty})
     assert [c.name for c in paperless.taxonomy().correspondents] == ["C1", "C2"]

@@ -112,10 +112,9 @@ taxonomy:
   new_document_types: propose         # never: the model may only choose listed types (schema enum)
   new_correspondent_requires_text_evidence: true
   fuzzy_threshold: 0.8                # difflib cutoff; >= 1 disables fuzzy matching
-  storage_paths: {}                   # kind: "Storage path name" (only when empty)
 
 policy:
-  fields: [title, correspondent, document_type, storage_path, created, recipient, authors, tags]
+  fields: [title, correspondent, document_type, created, recipient, authors, tags]
   first_run: fill_empty               # fill_empty | propose
   rerun: propose                      # fill_empty | propose
   title_empty_if_filename: true
@@ -171,6 +170,22 @@ appear in the note with "(new)" and are created when the proposal is accepted
 with the apply tag. The settings `create_correspondents` / `create_document_types`
 of 0.1/0.2 still work: `true` means `create`; `false` means `propose` for
 correspondents and `never` for document types.
+
+## Storage paths
+
+The service does not set storage paths (removed in 0.4.0). Paperless already
+covers this better:
+
+- One scheme for everything: `PAPERLESS_FILENAME_FORMAT`, for example
+  `{{ custom_fields | get_cf_value("Recipient", "Unassigned") }}/{{ correspondent }}/{{ created }} - {{ title }}`.
+  Documents without a storage path use it.
+- Exceptions as a Paperless workflow: triggers *Document Added* and *Document
+  Updated*, filter *has document type* (e.g. "Article"), action *Assignment* →
+  storage path. It runs when this service sets the type through the API and
+  when you change the type by hand.
+
+A configuration that still contains `taxonomy.storage_paths` is rejected with
+a message pointing here.
 
 ## Correspondent shortlist
 

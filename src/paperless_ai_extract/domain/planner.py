@@ -7,7 +7,6 @@ Rules (one engine for import and manual reruns):
   * Empty field + fill policy + unverified        -> fill the safe fallback
                                                      (if any) and propose the value.
   * Non-empty field, or propose policy             -> propose (never overwrite).
-  * Storage path is only ever filled when empty, never proposed.
   * Tags are only ever added, never removed.
 """
 from __future__ import annotations
@@ -21,8 +20,7 @@ from .matching import apply_alias, find, shortlist
 from .messages import Messages
 from .models import Candidate, Change, DocumentSnapshot, Extraction, Item, Plan, Taxonomy
 
-DIRECT_FIELDS = {"title", "correspondent", "document_type", "storage_path", "created"}
-NEVER_PROPOSE = {"storage_path"}
+DIRECT_FIELDS = {"title", "correspondent", "document_type", "created"}
 
 
 def selectable_tags(config: Config, taxonomy: Taxonomy) -> list[Item]:
@@ -107,7 +105,7 @@ class FieldAccess:
             return self.msg("empty")
         if name == "tags":
             return ", ".join(self.taxonomy.name_of("tags", i) or "" for i in value)
-        if name in ("correspondent", "document_type", "storage_path"):
+        if name in ("correspondent", "document_type"):
             return self.taxonomy.name_of(name + "s", value) or self.msg("empty")
         if name == "recipient":
             for label, option_id in self.recipient_options().items():
@@ -177,14 +175,6 @@ def build_candidates(config: Config, ex: Extraction, doc: DocumentSnapshot,
             else:
                 info.append(msg("info_new_ignored", field=msg.labels["document_type"],
                                 name=type_name))
-
-    path_name = tax_cfg.storage_paths.get(ex.kind)
-    if path_name:
-        path = find(path_name, taxonomy.storage_paths, 1.0)
-        if path:
-            candidates.append(Candidate("storage_path", path.id, path.name))
-        else:
-            info.append(msg("info_storage_path", name=path_name))
 
     if ex.tags:
         by_name = {t.name: t for t in selectable_tags(config, taxonomy)}
@@ -288,8 +278,6 @@ def decide(config: Config, candidates: list[Candidate], doc: DocumentSnapshot,
                 changes.append(change("propose", cand.value, cand.display, False, cand.reason,
                                       cand.create, expect=cand.fallback))
                 continue
-        if cand.field in NEVER_PROPOSE:
-            continue
         if cand.field == "recipient" and cand.value == unassigned:
             continue  # proposing "Unassigned" is noise
         changes.append(change("propose", cand.value, cand.display, cand.verified, cand.reason, cand.create))

@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 
 @dataclass(frozen=True)
 class Item:
-    """A taxonomy object (correspondent, document type, storage path, tag)."""
+    """A taxonomy object (correspondent, document type, tag)."""
     id: int
     name: str
     owner: int | None = None
@@ -17,7 +17,6 @@ class Item:
 class Taxonomy:
     correspondents: list[Item] = field(default_factory=list)
     document_types: list[Item] = field(default_factory=list)
-    storage_paths: list[Item] = field(default_factory=list)
     tags: list[Item] = field(default_factory=list)
     custom_fields: list[dict] = field(default_factory=list)
 
@@ -40,7 +39,6 @@ class DocumentSnapshot:
     original_file_name: str | None = None
     correspondent: int | None = None
     document_type: int | None = None
-    storage_path: int | None = None
     created: str | None = None
     tags: list[int] = field(default_factory=list)
     content: str = ""

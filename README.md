@@ -33,9 +33,13 @@ It extracts the following; everything except the first three is optional:
 | title, correspondent, document type | The model sees your document types and the correspondents that appear in the document (a shortlist), and picks the best fit; answers are matched again (aliases, exact, fuzzy). A name with no match is **proposed** as a new entry and created only when you accept it (or created directly, or ignored: configurable). |
 | tags | Chosen **only from existing tags** (optionally an allowlist), added and never removed. |
 | document date | Proposed by default, or set on the first analysis when the date is printed. |
-| storage path | Chosen by document kind (e.g. `household` / `article`). |
 | addressee / recipient | A select custom field (e.g. household member), validated against the address block. Configurable aliases and locale rules, plus an optional second OCR reading of the address window. |
 | articles | Authors (custom field), journal as correspondent, and publication year as the date. |
+
+Storage paths are left to Paperless: give your library one scheme with
+`PAPERLESS_FILENAME_FORMAT`, and handle exceptions with a Paperless workflow,
+e.g. *document type is "Article" → storage path "Articles"* (see
+[configuration](docs/configuration.md#storage-paths)).
 
 ### How it compares
 
@@ -52,7 +56,7 @@ existing metadata alone.
    permissions:
    - view/change: Document
    - view/add: Correspondent, Document type, Tag, Note
-   - view: Storage path, Custom field
+   - view: Custom field
 
    Create an API token for it (profile menu → API token).
    *Documents owned by other users must be shared with this user, or use an
@@ -68,7 +72,7 @@ existing metadata alone.
 services:
   # ... webserver, db, broker from your existing paperless-ngx compose file
   ai-extract:
-    image: ghcr.io/vtietz/paperless-ai-extract:0.3
+    image: ghcr.io/vtietz/paperless-ai-extract:0.4
     restart: unless-stopped
     depends_on: [webserver]
     env_file: ai-extract.env

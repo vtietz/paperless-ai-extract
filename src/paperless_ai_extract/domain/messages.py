@@ -4,7 +4,7 @@ from __future__ import annotations
 MESSAGES = {
     "en": {
         "labels": {"title": "Title", "correspondent": "Correspondent",
-                   "document_type": "Document type", "storage_path": "Storage path",
+                   "document_type": "Document type",
                    "created": "Date", "recipient": "Recipient", "authors": "Authors",
                    "tags": "Tags"},
         "header": "AI extraction ({model}, {mode})",
@@ -25,7 +25,6 @@ MESSAGES = {
         "reason_year": "year not found in document text",
         "reason_date": "date not found in document text",
         "info_new_ignored": "{field} {name!r} has no existing match and new entries are disabled.",
-        "info_storage_path": "Configured storage path {name!r} does not exist.",
         "info_recipient_window": "Recipient {name!r} confirmed by address-window OCR.",
         "info_recipient_unknown": "Recipient could not be determined.",
         "info_authors_missing": "Authors not found in document text: {names}",
@@ -33,7 +32,7 @@ MESSAGES = {
     },
     "de": {
         "labels": {"title": "Titel", "correspondent": "Korrespondent",
-                   "document_type": "Dokumenttyp", "storage_path": "Speicherpfad",
+                   "document_type": "Dokumenttyp",
                    "created": "Datum", "recipient": "Empfänger", "authors": "Autoren",
                    "tags": "Tags"},
         "header": "KI-Extraktion ({model}, {mode})",
@@ -54,7 +53,6 @@ MESSAGES = {
         "reason_year": "Jahr nicht im Dokumenttext gefunden",
         "reason_date": "Datum nicht im Dokumenttext gefunden",
         "info_new_ignored": "{field} {name!r} existiert nicht; neue Einträge sind deaktiviert.",
-        "info_storage_path": "Konfigurierter Speicherpfad {name!r} existiert nicht.",
         "info_recipient_window": "Empfänger {name!r} durch Adressfenster-OCR bestätigt.",
         "info_recipient_unknown": "Empfänger konnte nicht bestimmt werden.",
         "info_authors_missing": "Autoren nicht im Dokumenttext gefunden: {names}",

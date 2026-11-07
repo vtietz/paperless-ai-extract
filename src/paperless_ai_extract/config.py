@@ -229,8 +229,15 @@ class TaxonomyConfig(Strict):
     new_correspondent_requires_text_evidence: bool = True
     # Same difflib cutoff as Paperless's native AI matching; >= 1 disables fuzzy matching.
     fuzzy_threshold: float = 0.8
-    # kind -> storage path name; applied only when the document has none.
-    storage_paths: dict[str, str] = Field(default_factory=dict)
+    @model_validator(mode="before")
+    @classmethod
+    def _removed_settings(cls, data):
+        if isinstance(data, dict) and "storage_paths" in data:
+            raise ValueError(
+                "taxonomy.storage_paths was removed in 0.4.0: assign storage paths with "
+                "a Paperless workflow (trigger Document Added/Updated, filter by document "
+                "type, action assign storage path); see docs/configuration.md")
+        return data
 
     @model_validator(mode="after")
     def _legacy_create_flags(self):
@@ -242,13 +249,13 @@ class TaxonomyConfig(Strict):
         return self
 
 
-FieldName = Literal["title", "correspondent", "document_type", "storage_path",
+FieldName = Literal["title", "correspondent", "document_type",
                     "created", "recipient", "authors", "tags"]
 
 
 class PolicyConfig(Strict):
     fields: list[FieldName] = Field(default_factory=lambda: [
-        "title", "correspondent", "document_type", "storage_path",
+        "title", "correspondent", "document_type",
         "created", "recipient", "authors", "tags"])
     # first_run: the service has never processed this document before.
     first_run: Literal["fill_empty", "propose"] = "fill_empty"

@@ -49,3 +49,13 @@ def test_cli_reports_unwritable_state_without_traceback(config_factory, tmp_path
     path.write_text(path.read_text().replace("path: state.sqlite3", f"path: {blocker}/state.sqlite3"))
     assert main(["-c", str(path), "analyse", "1"]) == 2
     assert "state error" in capsys.readouterr().err
+
+
+
+def test_removed_storage_paths_setting_explains_the_replacement(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text("paperless: {url: http://p, token: t}\n"
+                    "llm: {base_url: http://o, model: m}\n"
+                    "taxonomy: {storage_paths: {article: Articles}}\n")
+    with pytest.raises(ConfigError, match="Paperless workflow"):
+        load_config(path, environ={})

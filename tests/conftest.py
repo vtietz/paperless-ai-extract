@@ -53,7 +53,6 @@ extraction:
     enabled: true
 taxonomy:
   correspondent_aliases: {"Stadtwerk Musterstadt GmbH": "Stadtwerke Musterstadt"}
-  storage_paths: {household: Household, article: Articles}
 state:
   path: state.sqlite3
   heartbeat_file: heartbeat
@@ -91,7 +90,6 @@ def make_taxonomy() -> Taxonomy:
         correspondents=[Item(10, "Stadtwerke Musterstadt"), Item(11, "Versicherung Beispiel AG"),
                         Item(12, "i-com")],
         document_types=[Item(20, "Rechnung"), Item(21, "Article")],
-        storage_paths=[Item(30, "Household"), Item(31, "Articles")],
         tags=[Item(i, name) for name, i in
               {"AI: pending": 101, "AI: apply": 102, "AI: proposal": 103,
                "AI: review": 104, "AI: error": 105}.items()]
@@ -121,7 +119,7 @@ class FakeStore:
 
     def taxonomy(self) -> Taxonomy:
         return Taxonomy(list(self.tax.correspondents), list(self.tax.document_types),
-                        list(self.tax.storage_paths), list(self.tax.tags),
+                        list(self.tax.tags),
                         list(self.tax.custom_fields))
 
     def document_ids_with_tag(self, tag_id):

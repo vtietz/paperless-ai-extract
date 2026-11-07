@@ -30,19 +30,17 @@ def test_first_run_fills_empty_fields(config, taxonomy):
     assert c[("title", "fill")].value == "Jahresabrechnung Strom 2025"   # filename title = empty
     assert c[("correspondent", "fill")].value == 10
     assert c[("document_type", "fill")].value == 20
-    assert c[("storage_path", "fill")].value == 30
     assert c[("recipient", "fill")].value == "opt-joint"
     assert not p.proposals and not p.review
 
 
 def test_existing_values_are_never_overwritten(config, taxonomy):
-    doc = letter_doc(title="Meine Abrechnung", correspondent=11, storage_path=31,
+    doc = letter_doc(title="Meine Abrechnung", correspondent=11,
                      custom_fields={RECIPIENT_FIELD["id"]: "opt-alex"})
     c = by_field(plan(config, taxonomy, extraction(), doc))
     assert c[("title", "propose")].current_display == "Meine Abrechnung"
     assert c[("correspondent", "propose")].display == "Stadtwerke Musterstadt"
     assert c[("recipient", "propose")].value == "opt-joint"
-    assert ("storage_path", "propose") not in c          # storage path is never proposed
     assert not any(ch.action == "fill" and ch.field != "document_type" for ch in c.values())
 
 
@@ -54,7 +52,7 @@ def test_rerun_only_proposes(config, taxonomy):
 
 def test_identical_values_produce_no_change(config, taxonomy):
     doc = letter_doc(title="Jahresabrechnung Strom 2025", correspondent=10, document_type=20,
-                     storage_path=30, custom_fields={RECIPIENT_FIELD["id"]: "opt-joint"})
+                     custom_fields={RECIPIENT_FIELD["id"]: "opt-joint"})
     assert plan(config, taxonomy, extraction(), doc).changes == []
 
 
@@ -116,7 +114,6 @@ def test_article_fields(config, taxonomy):
     p = plan(config, taxonomy, ex, letter_doc(content=text))
     c = by_field(p)
     assert c[("correspondent", "fill")].value == 12
-    assert c[("storage_path", "fill")].value == 31
     assert c[("authors", "fill")].value == "Alex Muster"
     assert c[("created", "fill")].value == "2007-01-01"
     assert ("recipient", "fill") not in c                     # articles have no recipient
