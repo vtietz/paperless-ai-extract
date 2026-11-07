@@ -17,7 +17,7 @@ from typing import Callable
 
 from ..config import Config
 from .evidence import date_supported, occurs_in, validated_recipient
-from .matching import apply_alias, find
+from .matching import apply_alias, find, shortlist
 from .messages import Messages
 from .models import Candidate, Change, DocumentSnapshot, Extraction, Item, Plan, Taxonomy
 
@@ -45,6 +45,29 @@ def selectable_document_types(config: Config, taxonomy: Taxonomy) -> list[str]:
     names = sorted({t.name for t in taxonomy.document_types if t.name not in excluded},
                    key=str.casefold)
     return names if len(names) <= cfg.max_listed else []
+
+
+def offered_correspondents(config: Config, taxonomy: Taxonomy, content: str,
+                           aliases: dict[str, str]) -> list[str]:
+    """Existing correspondents listed in the prompt for this document."""
+    cfg = config.extraction.correspondents
+    if cfg.offer == "none":
+        return []
+    excluded = set(cfg.excluded)
+    items = [c for c in taxonomy.correspondents if c.name not in excluded]
+    if cfg.offer == "all" and len(items) <= cfg.max_listed:
+        return sorted({c.name for c in items}, key=str.casefold)
+    return shortlist(content, items, aliases, cfg.max_listed)
+
+
+def _new_item(field: str, endpoint: str, name: str, policy: str, msg: Messages) -> Candidate | None:
+    """Candidate for a name without an existing match, by the new-item policy."""
+    if policy == "never":
+        return None
+    cand = Candidate(field, None, msg("new", name=name), create=(endpoint, name))
+    if policy == "propose":
+        cand.verified, cand.reason = False, msg("reason_new_proposed")
+    return cand
 
 
 class FieldAccess:
@@ -127,20 +150,19 @@ def build_candidates(config: Config, ex: Extraction, doc: DocumentSnapshot,
         match = find(name, taxonomy.correspondents, tax_cfg.fuzzy_threshold)
         if match:
             cand = Candidate("correspondent", match.id, match.name)
-        elif tax_cfg.create_correspondents:
-            cand = Candidate("correspondent", None, msg("new", name=name),
-                             create=("correspondents", name))
-            if tax_cfg.new_correspondent_requires_text_evidence and not (
+        else:
+            cand = _new_item("correspondent", "correspondents", name,
+                             tax_cfg.new_correspondents, msg)
+            if cand and tax_cfg.new_correspondent_requires_text_evidence and not (
                     occurs_in(name, content) or occurs_in(ex.correspondent, content)):
                 cand.verified, cand.reason = False, msg("reason_new_name")
-        else:
-            cand = Candidate("correspondent", None, msg("new", name=name),
-                             create=("correspondents", name),
-                             verified=False, reason=msg("reason_creation_disabled"))
-        if article_evidence and cand.verified and not (
+            if cand is None:
+                info.append(msg("info_new_ignored", field=msg.labels["correspondent"], name=name))
+        if cand and article_evidence and cand.verified and not (
                 occurs_in(ex.correspondent, content) or occurs_in(name, content)):
             cand.verified, cand.reason = False, msg("reason_publication")
-        candidates.append(cand)
+        if cand:
+            candidates.append(cand)
 
     if ex.document_type:
         type_name = apply_alias(ex.document_type, tax_cfg.document_type_aliases)
@@ -148,11 +170,13 @@ def build_candidates(config: Config, ex: Extraction, doc: DocumentSnapshot,
         if match:
             candidates.append(Candidate("document_type", match.id, match.name))
         else:
-            allowed = tax_cfg.create_document_types
-            candidates.append(Candidate(
-                "document_type", None, msg("new", name=type_name),
-                create=("document_types", type_name), verified=allowed,
-                reason="" if allowed else msg("reason_creation_disabled")))
+            cand = _new_item("document_type", "document_types", type_name,
+                             tax_cfg.new_document_types, msg)
+            if cand:
+                candidates.append(cand)
+            else:
+                info.append(msg("info_new_ignored", field=msg.labels["document_type"],
+                                name=type_name))
 
     path_name = tax_cfg.storage_paths.get(ex.kind)
     if path_name:

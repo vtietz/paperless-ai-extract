@@ -47,6 +47,7 @@ def test_edit_during_taxonomy_creation_is_preserved(build):
     from conftest import LETTER
     doc = letter_doc(content=LETTER + "\nNetzbetreiber Nord")
     extractor, store = build([doc], FakeLLM(answer(correspondents=["Netzbetreiber Nord"])))
+    extractor.config.taxonomy.new_correspondents = "create"
     original = store.create_object
 
     def create_while_user_edits(endpoint, name):

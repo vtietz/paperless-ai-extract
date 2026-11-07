@@ -3,7 +3,7 @@
 #   cp ai-extract.env.example ai-extract.env   # then set PAPERLESS_TOKEN etc.
 services:
   ai-extract:
-    image: ghcr.io/vtietz/paperless-ai-extract:0.2
+    image: ghcr.io/vtietz/paperless-ai-extract:0.3
     restart: unless-stopped
     depends_on: [webserver]
     env_file: ai-extract.env

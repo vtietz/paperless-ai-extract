@@ -62,6 +62,10 @@ extraction:
     allowed: []                       # tag names; empty = all except inbox and queue tags
     excluded: []
     max_tags: 3
+  correspondents:                     # existing correspondents offered to the model
+    offer: shortlist                  # shortlist (names found in the OCR text) | all | none
+    max_listed: 15                    # shortlist size; "all" falls back to the shortlist above this
+    excluded: []
   document_types:                     # existing types offered to the model
     offer_existing: true              # list them in the prompt; the model picks the best fit
     excluded: []                      # type names never offered
@@ -104,8 +108,8 @@ taxonomy:
   correspondent_aliases: {}           # printed/model name -> existing correspondent, e.g. {"Telekom": "Telekom Deutschland GmbH"}
   correspondent_aliases_file: null    # JSON object with the same shape
   document_type_aliases: {}           # model name -> existing type, e.g. {"Slide deck": "Presentation"}
-  create_correspondents: true         # created unowned (shared), like Paperless's AI workflow
-  create_document_types: true         # false: the model may only choose listed types
+  new_correspondents: propose         # no existing match: propose (created on apply) | create | never
+  new_document_types: propose         # never: the model may only choose listed types (schema enum)
   new_correspondent_requires_text_evidence: true
   fuzzy_threshold: 0.8                # difflib cutoff; >= 1 disables fuzzy matching
   storage_paths: {}                   # kind: "Storage path name" (only when empty)
@@ -150,6 +154,7 @@ good start for most setups. A custom `prompt_file` uses Python
 | `${kinds}` | JSON list of `extraction.kinds` |
 | `${tag_options}` | JSON list of selectable tags |
 | `${document_type_options}` | JSON list of existing document types offered to the model |
+| `${correspondent_options}` | JSON list of existing correspondents offered for this document |
 | `${recipient_options}` | JSON list of dropdown labels |
 | `${recipient_aliases}` | `Alias: printed => canonical` lines |
 
@@ -158,8 +163,25 @@ The model returns JSON with the fields `kind`, `authors`, `publication_year`,
 `document_date`, `addressee_text` and `recipient`. Each field is present only
 when its feature is enabled. Tags are an enum of the selectable tags; unknown
 tags are dropped. Document types are an enum of the listed types only when
-`create_document_types` is false; otherwise the model may name a new type,
-which is matched (alias, exact, fuzzy) and created only if nothing matches.
+`new_document_types` is `never`; otherwise the model may name a new type,
+which is matched (alias, exact, fuzzy) first.
+
+New correspondents and types are created unowned (shared). With `propose` they
+appear in the note with "(new)" and are created when the proposal is accepted
+with the apply tag. The settings `create_correspondents` / `create_document_types`
+of 0.1/0.2 still work: `true` means `create`; `false` means `propose` for
+correspondents and `never` for document types.
+
+## Correspondent shortlist
+
+Listing every correspondent would cost tokens on every request and grows with
+your archive. By default the service lists only names that probably occur in
+the document: before the model call it searches Paperless's OCR text for each
+correspondent name and the configured aliases (whole name, or the significant
+words of the name, tolerant of OCR errors; legal forms like GmbH are ignored)
+and lists the best `max_listed`. The model uses an exact listed name when the
+sender is among them, otherwise writes the name as printed, which is then
+matched as before. The shortlist is part of the cache key.
 
 ## Locale rules for addresses
 

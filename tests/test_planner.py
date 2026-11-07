@@ -71,6 +71,7 @@ def test_new_correspondent_without_text_evidence_is_only_proposed(config, taxono
 
 
 def test_new_correspondent_with_text_evidence_is_created(config, taxonomy):
+    config.taxonomy.new_correspondents = "create"
     doc = letter_doc(content=LETTER + "\nNetzbetreiber Nord GmbH")
     c = by_field(plan(config, taxonomy, extraction(correspondent="Netzbetreiber Nord"), doc))
     assert c[("correspondent", "fill")].create == ("correspondents", "Netzbetreiber Nord")

@@ -161,10 +161,19 @@ class TagsConfig(Strict):
     max_tags: int = Field(3, ge=1, le=10)
 
 
+class CorrespondentsConfig(Strict):
+    """Existing correspondents offered to the model."""
+    # shortlist: names (or aliases) found in the document's OCR text, best first;
+    # all: every name while there are at most max_listed, else the shortlist; none.
+    offer: Literal["shortlist", "all", "none"] = "shortlist"
+    max_listed: int = Field(15, ge=1)
+    excluded: list[str] = Field(default_factory=list)
+
+
 class DocumentTypesConfig(Strict):
     """Existing document types offered to the model as its choices."""
     # List the existing types in the prompt; the model picks the best fit and may
-    # name a new type only when taxonomy.create_document_types is true.
+    # name a new type unless taxonomy.new_document_types is "never".
     offer_existing: bool = True
     excluded: list[str] = Field(default_factory=list)
     # Larger taxonomies are not listed (prompt size); matching still applies.
@@ -188,6 +197,7 @@ class ExtractionConfig(Strict):
     recipient: RecipientConfig = Field(default_factory=RecipientConfig)
     articles: ArticleConfig = Field(default_factory=ArticleConfig)
     tags: TagsConfig = Field(default_factory=TagsConfig)
+    correspondents: CorrespondentsConfig = Field(default_factory=CorrespondentsConfig)
     document_types: DocumentTypesConfig = Field(default_factory=DocumentTypesConfig)
     document_date: DocumentDateConfig = Field(default_factory=DocumentDateConfig)
 
@@ -200,18 +210,36 @@ class ExtractionConfig(Strict):
         return self
 
 
+NewItemPolicy = Literal["create", "propose", "never"]
+
+
 class TaxonomyConfig(Strict):
     correspondent_aliases: dict[str, str] = Field(default_factory=dict)
     correspondent_aliases_file: Path | None = None
     # model name -> existing document type, e.g. {"Slide deck": "Presentation"}
     document_type_aliases: dict[str, str] = Field(default_factory=dict)
-    create_correspondents: bool = True
-    create_document_types: bool = True
+    # A name with no existing match: create it right away, propose it (created
+    # only when the proposal is accepted with the apply tag), or drop it.
+    new_correspondents: NewItemPolicy = "propose"
+    new_document_types: NewItemPolicy = "propose"
+    # Deprecated (0.1/0.2): true -> "create", false -> "propose" (correspondents)
+    # or "never" (document types). Ignored when the new_* setting is given.
+    create_correspondents: bool | None = None
+    create_document_types: bool | None = None
     new_correspondent_requires_text_evidence: bool = True
     # Same difflib cutoff as Paperless's native AI matching; >= 1 disables fuzzy matching.
     fuzzy_threshold: float = 0.8
     # kind -> storage path name; applied only when the document has none.
     storage_paths: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _legacy_create_flags(self):
+        given = self.model_fields_set
+        if self.create_correspondents is not None and "new_correspondents" not in given:
+            self.new_correspondents = "create" if self.create_correspondents else "propose"
+        if self.create_document_types is not None and "new_document_types" not in given:
+            self.new_document_types = "create" if self.create_document_types else "never"
+        return self
 
 
 FieldName = Literal["title", "correspondent", "document_type", "storage_path",

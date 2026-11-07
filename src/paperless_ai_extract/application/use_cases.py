@@ -18,7 +18,8 @@ from ..domain.matching import compact
 from ..domain.models import Change, DocumentSnapshot, Extraction, Item, Plan, Taxonomy
 from ..domain.messages import Messages
 from ..domain.planner import (DIRECT_FIELDS, FieldAccess, note_text, plan_document,
-                              selectable_document_types, selectable_tags)
+                              offered_correspondents, selectable_document_types,
+                              selectable_tags)
 from ..domain.prompt import render_instructions, with_document_text
 from ..domain.schema import build_schema, parse_extraction
 from ..ports import AddressReader, DocumentStore, LLMClient, PageRenderer, StateStore
@@ -36,9 +37,10 @@ class Context:
     labels: list[str] | None
     tag_names: list[str]
     schema: dict
-    instructions: str
-    fingerprint: str
+    instructions: str        # rendered without the per-document correspondent list
+    fingerprint: str         # everything except the per-document correspondent list
     tag_ids: dict[str, int] = field(default_factory=dict)
+    type_names: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -89,7 +91,7 @@ class MetadataExtractor:
                 and taxonomy.document_types):
             log.warning("more than %d document types: not listed in the prompt",
                         config.extraction.document_types.max_listed)
-        type_enum = None if config.taxonomy.create_document_types else type_names
+        type_enum = type_names if config.taxonomy.new_document_types == "never" else None
         schema = build_schema(config.extraction, labels, tag_names, type_enum)
         instructions = render_instructions(config, self.template, labels, tag_names, type_names)
         fingerprint = hashlib.sha256(json.dumps({
@@ -99,7 +101,7 @@ class MetadataExtractor:
         }, sort_keys=True, default=str).encode()).hexdigest()[:16]
         create = config.queue.create_missing_tags if create_tags is None else create_tags
         return Context(taxonomy, access, labels, tag_names, schema, instructions, fingerprint,
-                       self._tags(taxonomy, create))
+                       self._tags(taxonomy, create), type_names)
 
     def _tags(self, taxonomy: Taxonomy, create: bool) -> dict[str, int]:
         names = self.config.queue.tags.model_dump()
@@ -129,21 +131,28 @@ class MetadataExtractor:
         checksum = self.store.checksum(doc.id, inp.source == "original") if uses_image else ""
         source_key = hashlib.sha256(
             f"{checksum}|{text if uses_text else ''}".encode()).hexdigest()[:16]
+        offered = offered_correspondents(self.config, ctx.taxonomy, doc.content, self.aliases)
+        instructions = (render_instructions(self.config, self.template, ctx.labels,
+                                            ctx.tag_names, ctx.type_names, offered)
+                        if offered else ctx.instructions)
+        fingerprint = (hashlib.sha256(f"{ctx.fingerprint}|{json.dumps(offered)}".encode())
+                       .hexdigest()[:16] if offered else ctx.fingerprint)
         if not force:
-            cached = self.state.cached(doc.id, source_key, ctx.fingerprint)
+            cached = self.state.cached(doc.id, source_key, fingerprint)
             if cached:
                 return Extraction.from_dict(cached), True, {}
         images: list[bytes] = []
         if uses_image:
             data, mime = download()
             images = self.renderer.render(data, mime, inp.pages, inp.max_edge)
-        prompt = with_document_text(ctx.instructions, text) if uses_text else ctx.instructions
+        prompt = with_document_text(instructions, text) if uses_text else instructions
         started = time.monotonic()
         result = self.llm.generate_json(prompt, images, ctx.schema)
-        metrics = {**result.metrics, "seconds": round(time.monotonic() - started, 1)}
+        metrics = {**result.metrics, "seconds": round(time.monotonic() - started, 1),
+                   "offered_correspondents": offered}
         extraction = parse_extraction(result.content, self.config.extraction, ctx.labels,
                                       ctx.tag_names)
-        self.state.store(doc.id, source_key, ctx.fingerprint, extraction.to_dict(), metrics)
+        self.state.store(doc.id, source_key, fingerprint, extraction.to_dict(), metrics)
         return extraction, False, metrics
 
     def analyse(self, doc_id: int, ctx: Context, *, force: bool = False,

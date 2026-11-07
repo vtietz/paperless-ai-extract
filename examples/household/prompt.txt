@@ -25,7 +25,8 @@ For an ARTICLE:
 
 For HOUSEHOLD paperwork:
 - title: concise German title starting with document type, sender, relevant period.
-- correspondents: one sender organization.
+- correspondents: one sender organization; if it is one of ${correspondent_options},
+  use that exact name.
 - document_types: the best fitting existing type from ${document_type_options};
   only if none fits, one new short, general German type.
 - authors: []. publication_year: null.

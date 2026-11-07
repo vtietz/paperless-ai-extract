@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 — 2026-11-07
+
+- Correspondent shortlist: existing correspondents whose name (or alias) occurs
+  in the document's OCR text are listed in the prompt (`extraction.correspondents`,
+  `offer: shortlist|all|none`, `max_listed: 15`). New placeholder
+  `${correspondent_options}`.
+- New entries are proposed by default: `taxonomy.new_correspondents` and
+  `new_document_types` (`propose` | `create` | `never`, default `propose`). A
+  proposed entry is created when the proposal is accepted. **Behaviour change:**
+  0.1/0.2 created new correspondents and types right away; set `create` to keep
+  that. The old `create_*` booleans are still accepted.
+
 ## 0.2.0 — 2026-11-06
 
 - The model now sees the existing document types and picks the best fit

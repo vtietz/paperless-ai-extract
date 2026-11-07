@@ -18,6 +18,8 @@ It is deliberately **conservative**:
   and a tag. Adding the tag `AI: apply` accepts the proposal from the latest
   note. If the document is re-analysed first, the accept tag is removed and
   you review the new proposal.
+- **Your lists stay yours.** Correspondents and document types are managed in
+  Paperless. New entries suggested by the model are only proposals by default.
 - **Fail-closed evidence checks.** New correspondents, dates, journal names and
   addressees must be backed by the document text. Otherwise they become a
   proposal, not a fill.
@@ -28,7 +30,7 @@ It extracts the following; everything except the first three is optional:
 
 | Field | Notes |
 |---|---|
-| title, correspondent, document type | Matched against your existing taxonomy (aliases, exact, fuzzy). The model sees your document types and picks the best fit. New entries can be created, or switched off. |
+| title, correspondent, document type | The model sees your document types and the correspondents that appear in the document (a shortlist), and picks the best fit; answers are matched again (aliases, exact, fuzzy). A name with no match is **proposed** as a new entry and created only when you accept it (or created directly, or ignored: configurable). |
 | tags | Chosen **only from existing tags** (optionally an allowlist), added and never removed. |
 | document date | Proposed by default, or set on the first analysis when the date is printed. |
 | storage path | Chosen by document kind (e.g. `household` / `article`). |
@@ -66,7 +68,7 @@ existing metadata alone.
 services:
   # ... webserver, db, broker from your existing paperless-ngx compose file
   ai-extract:
-    image: ghcr.io/vtietz/paperless-ai-extract:0.2
+    image: ghcr.io/vtietz/paperless-ai-extract:0.3
     restart: unless-stopped
     depends_on: [webserver]
     env_file: ai-extract.env

@@ -10,6 +10,8 @@ plain-text template (Python string.Template syntax) with these placeholders:
   ${kinds}               JSON list of configured kinds
   ${tag_options}         JSON list of selectable tag names
   ${document_type_options} JSON list of existing document types offered to the model
+  ${correspondent_options} JSON list of existing correspondents offered for this
+                         document (shortlist from its OCR text by default)
   ${recipient_options}   JSON list of the recipient dropdown labels
   ${recipient_aliases}   "Alias: printed => canonical" lines
 
@@ -63,15 +65,24 @@ def _document_type_line(config: Config, language: str, type_names: list[str] | N
     if not type_names:
         return f"- document_types: one short, general document type{language}, or []."
     listed = json.dumps(type_names, ensure_ascii=False)
-    if config.taxonomy.create_document_types:
+    if config.taxonomy.new_document_types != "never":
         return (f"- document_types: the best fitting existing type from {listed}; only if "
                 f"none fits, one new short, general type{language}; or [].")
     return f"- document_types: one type from {listed}, or [] if none fits."
 
 
+def _correspondent_line(correspondent_names: list[str] | None) -> str:
+    if not correspondent_names:
+        return "- correspondents: the one sending organisation or person as printed, or []."
+    listed = json.dumps(correspondent_names, ensure_ascii=False)
+    return ("- correspondents: the one sending organisation or person; if it is one of "
+            f"{listed}, use that exact name, otherwise the name as printed; or [].")
+
+
 def field_instructions(config: Config, recipient_labels: list[str] | None,
                        tag_names: list[str] | None,
-                       type_names: list[str] | None = None) -> str:
+                       type_names: list[str] | None = None,
+                       correspondent_names: list[str] | None = None) -> str:
     ex = config.extraction
     language = f" in {ex.language}" if ex.language else " in the document's language"
     lines = []
@@ -88,7 +99,7 @@ def field_instructions(config: Config, recipient_labels: list[str] | None,
     lines += [
         f"- title: concise title{language}: document type, sender and subject or period. "
         "Join words split only by a line wrap; keep genuine hyphens.",
-        "- correspondents: the one sending organisation or person as printed, or [].",
+        _correspondent_line(correspondent_names),
         _document_type_line(config, language, type_names),
     ]
     if ex.tags.enabled and tag_names:
@@ -114,14 +125,17 @@ def field_instructions(config: Config, recipient_labels: list[str] | None,
 def render_instructions(config: Config, template_text: str | None,
                         recipient_labels: list[str] | None,
                         tag_names: list[str] | None = None,
-                        type_names: list[str] | None = None) -> str:
+                        type_names: list[str] | None = None,
+                        correspondent_names: list[str] | None = None) -> str:
     return Template(template_text or DEFAULT_TEMPLATE).safe_substitute(
         source_description=source_description(config.input.mode, config.input.pages),
         input_hint=input_hint(config.input.mode),
-        field_instructions=field_instructions(config, recipient_labels, tag_names, type_names),
+        field_instructions=field_instructions(config, recipient_labels, tag_names, type_names,
+                                              correspondent_names),
         kinds=json.dumps(config.extraction.kinds, ensure_ascii=False),
         tag_options=json.dumps(tag_names or [], ensure_ascii=False),
         document_type_options=json.dumps(type_names or [], ensure_ascii=False),
+        correspondent_options=json.dumps(correspondent_names or [], ensure_ascii=False),
         recipient_options=json.dumps(recipient_labels or [], ensure_ascii=False),
         recipient_aliases=_aliases(config),
     ).strip()

@@ -130,6 +130,7 @@ def test_new_correspondent_created_unowned_on_fill(build):
     from conftest import LETTER
     doc = letter_doc(content=LETTER + "\nNetzbetreiber Nord")
     extractor, store = build([doc], FakeLLM(answer(correspondents=["Netzbetreiber Nord"])))
+    extractor.config.taxonomy.new_correspondents = "create"
     extractor.process(1, extractor.context())
     assert ("create", "correspondents", "Netzbetreiber Nord") in store.writes
     assert store.docs[1].correspondent == store.next_id

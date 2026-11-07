@@ -41,7 +41,7 @@ def test_builtin_prompt_prefers_existing_types_and_allows_new(config):
 
 
 def test_builtin_prompt_restricts_types_when_creation_disabled(config):
-    config.taxonomy.create_document_types = False
+    config.taxonomy.new_document_types = "never"
     text = render_instructions(config, BUILTIN, ["Unassigned"], None, ["Rechnung"])
     assert 'one type from ["Rechnung"], or [] if none fits' in text and "new" not in text
 
@@ -70,14 +70,18 @@ def test_alias_maps_model_name_to_existing_type(config, taxonomy):
     assert change.action == "fill" and change.value == 20
 
 
-def test_unknown_type_with_creation_disabled_is_only_proposed(config, taxonomy):
-    config.taxonomy.create_document_types = False
+def test_unknown_type_is_proposed_by_default(config, taxonomy):
     [change] = type_changes(config, taxonomy, "Präsentation")
-    assert change.action == "propose"
+    assert change.action == "propose" and change.create == ("document_types", "Präsentation")
+
+
+def test_unknown_type_is_dropped_when_new_types_are_never(config, taxonomy):
+    config.taxonomy.new_document_types = "never"
+    assert type_changes(config, taxonomy, "Präsentation") == []
 
 
 def test_context_offers_types_to_model_and_enforces_enum(build, config):
-    config.taxonomy.create_document_types = False
+    config.taxonomy.new_document_types = "never"
     llm = FakeLLM(answer(document_types=["Rechnung"]))
     extractor, _ = build([letter_doc()], llm, cfg=config)
     ctx = extractor.context()
