@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "paperless-ai-extract"
-version = "0.4.0"
+version = "0.5.0"
 description = "Image- or text-based LLM metadata extraction for Paperless-ngx via its REST API"
 license = { text = "MIT" }
 authors = [{ name = "Vincent Tietz" }]

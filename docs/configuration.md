@@ -108,7 +108,7 @@ taxonomy:
   correspondent_aliases: {}           # printed/model name -> existing correspondent, e.g. {"Telekom": "Telekom Deutschland GmbH"}
   correspondent_aliases_file: null    # JSON object with the same shape
   document_type_aliases: {}           # model name -> existing type, e.g. {"Slide deck": "Presentation"}
-  new_correspondents: propose         # no existing match: propose (created on apply) | create | never
+  new_correspondents: create          # no existing match: create (if in OCR text, see below) | propose (created on apply) | never
   new_document_types: propose         # never: the model may only choose listed types (schema enum)
   new_correspondent_requires_text_evidence: true
   fuzzy_threshold: 0.8                # difflib cutoff; >= 1 disables fuzzy matching
@@ -171,14 +171,13 @@ with the apply tag. The settings `create_correspondents` / `create_document_type
 of 0.1/0.2 still work: `true` means `create`; `false` means `propose` for
 correspondents and `never` for document types.
 
-Recommendation: start with `propose`, especially for the first import into an
-empty or small correspondent list. Once the list is curated, consider
-`new_correspondents: create` together with
-`new_correspondent_requires_text_evidence: true`. A new sender is then created
-and set automatically only when its name occurs in the OCR text; names that are
-not found stay proposals. The text check does not catch OCR misspellings
-("Serwice"), so review new correspondents from time to time and map variants
-with `correspondent_aliases`.
+Since 0.5 new correspondents default to `create`: a new sender is created and
+set automatically when its name occurs in the OCR text
+(`new_correspondent_requires_text_evidence: true`); names that are not found stay
+proposals. The text check does not catch OCR misspellings ("Serwice"), so review
+new correspondents from time to time and map variants with
+`correspondent_aliases`. For a first bulk import into an empty correspondent
+list, `propose` is the more cautious choice.
 
 ## Storage paths
 

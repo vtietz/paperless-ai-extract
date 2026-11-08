@@ -30,7 +30,7 @@ It extracts the following; everything except the first three is optional:
 
 | Field | Notes |
 |---|---|
-| title, correspondent, document type | The model sees your document types and the correspondents that appear in the document (a shortlist), and picks the best fit; answers are matched again (aliases, exact, fuzzy). A name with no match is **proposed** as a new entry and created only when you accept it (or created directly, or ignored: configurable). |
+| title, correspondent, document type | The model sees your document types and the correspondents that appear in the document (a shortlist), and picks the best fit; answers are matched again (aliases, exact, fuzzy). A new correspondent is **created** when its name appears in the OCR text, otherwise **proposed** and created only when you accept it; new document types are proposed (both configurable: create, propose, never). |
 | tags | Chosen **only from existing tags** (optionally an allowlist), added and never removed. |
 | document date | Proposed by default, or set on the first analysis when the date is printed. |
 | addressee / recipient | A select custom field (e.g. household member), validated against the address block. Configurable aliases and locale rules, plus an optional second OCR reading of the address window. |
@@ -72,7 +72,7 @@ existing metadata alone.
 services:
   # ... webserver, db, broker from your existing paperless-ngx compose file
   ai-extract:
-    image: ghcr.io/vtietz/paperless-ai-extract:0.4
+    image: ghcr.io/vtietz/paperless-ai-extract:0.5
     restart: unless-stopped
     depends_on: [webserver]
     env_file: ai-extract.env

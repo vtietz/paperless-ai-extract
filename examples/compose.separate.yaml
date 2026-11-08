@@ -15,7 +15,7 @@
 name: paperless-ai-extract
 services:
   ai-extract:
-    image: ghcr.io/vtietz/paperless-ai-extract:0.4
+    image: ghcr.io/vtietz/paperless-ai-extract:0.5
     restart: unless-stopped
     env_file: ai-extract.env
     volumes:

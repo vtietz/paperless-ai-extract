@@ -220,7 +220,9 @@ class TaxonomyConfig(Strict):
     document_type_aliases: dict[str, str] = Field(default_factory=dict)
     # A name with no existing match: create it right away, propose it (created
     # only when the proposal is accepted with the apply tag), or drop it.
-    new_correspondents: NewItemPolicy = "propose"
+    # Correspondents default to create (0.5+); with the text-evidence check a
+    # name missing from the OCR text is still only proposed.
+    new_correspondents: NewItemPolicy = "create"
     new_document_types: NewItemPolicy = "propose"
     # Deprecated (0.1/0.2): true -> "create", false -> "propose" (correspondents)
     # or "never" (document types). Ignored when the new_* setting is given.

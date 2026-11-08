@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0 — 2026-11-08
+
+- **Behaviour change:** `taxonomy.new_correspondents` now defaults to `create`.
+  A new sender is created and set when its name occurs in the OCR text
+  (`new_correspondent_requires_text_evidence`, default `true`); otherwise it is
+  only proposed as before. Set `new_correspondents: propose` to keep the 0.3/0.4
+  behaviour. `new_document_types` stays `propose`.
+
 ## 0.4.0 — 2026-11-07
 
 - **Removed:** storage path handling (`taxonomy.storage_paths`, policy field

@@ -87,7 +87,20 @@ def _correspondent_changes(config, taxonomy, name, content):
     return [c for c in p.changes if c.field == "correspondent"], p
 
 
-def test_new_correspondent_is_proposed_by_default(config, taxonomy):
+def test_new_correspondent_is_created_by_default_when_in_text(config, taxonomy):
+    [change], plan = _correspondent_changes(config, taxonomy, "Netzbetreiber Nord",
+                                            LETTER + "\nNetzbetreiber Nord")
+    assert change.action == "fill" and change.create == ("correspondents", "Netzbetreiber Nord")
+
+
+def test_new_correspondent_not_in_text_is_only_proposed_by_default(config, taxonomy):
+    [change], plan = _correspondent_changes(config, taxonomy, "Netzbetreiber Nord", LETTER)
+    assert change.action == "propose" and change.create == ("correspondents", "Netzbetreiber Nord")
+    assert plan.review
+
+
+def test_new_correspondent_is_proposed_when_configured(config, taxonomy):
+    config.taxonomy.new_correspondents = "propose"
     [change], plan = _correspondent_changes(config, taxonomy, "Netzbetreiber Nord",
                                             LETTER + "\nNetzbetreiber Nord")
     assert change.action == "propose" and change.create == ("correspondents", "Netzbetreiber Nord")
@@ -104,6 +117,7 @@ def test_new_correspondent_dropped_when_never(config, taxonomy):
 def test_accepting_a_proposed_new_correspondent_creates_it(build):
     doc = letter_doc(content=LETTER + "\nNetzbetreiber Nord")
     extractor, store = build([doc], FakeLLM(answer(correspondents=["Netzbetreiber Nord"])))
+    extractor.config.taxonomy.new_correspondents = "propose"
     ctx = extractor.context()
     extractor.process(1, ctx)
     assert ("create", "correspondents", "Netzbetreiber Nord") not in store.writes
@@ -118,4 +132,4 @@ def test_legacy_create_flags_still_work():
     assert TaxonomyConfig(create_document_types=False).new_document_types == "never"
     assert TaxonomyConfig(create_document_types=True,
                           new_document_types="propose").new_document_types == "propose"
-    assert TaxonomyConfig().new_correspondents == "propose"
+    assert TaxonomyConfig().new_correspondents == "create"
