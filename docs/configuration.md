@@ -171,6 +171,15 @@ with the apply tag. The settings `create_correspondents` / `create_document_type
 of 0.1/0.2 still work: `true` means `create`; `false` means `propose` for
 correspondents and `never` for document types.
 
+Recommendation: start with `propose`, especially for the first import into an
+empty or small correspondent list. Once the list is curated, consider
+`new_correspondents: create` together with
+`new_correspondent_requires_text_evidence: true`. A new sender is then created
+and set automatically only when its name occurs in the OCR text; names that are
+not found stay proposals. The text check does not catch OCR misspellings
+("Serwice"), so review new correspondents from time to time and map variants
+with `correspondent_aliases`.
+
 ## Storage paths
 
 The service does not set storage paths (removed in 0.4.0). Paperless already
