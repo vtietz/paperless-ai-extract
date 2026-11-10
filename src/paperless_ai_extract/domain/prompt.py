@@ -116,7 +116,8 @@ def field_instructions(config: Config, recipient_labels: list[str] | None,
             "trainer, signatory or a person merely mentioned in the body. "
             f"Allowed: {json.dumps(recipient_labels or [], ensure_ascii=False)}. "
             f"Use {ex.recipient.unassigned!r} when unknown or ambiguous.",
-            "- addressee_text: quote only the printed addressee or certificate holder name(s), at most 240 characters.",
+            "- addressee_text: ONLY the printed addressee or certificate holder name(s), "
+            "verbatim, at most 240 characters. No street, postcode or city.",
         ]
         aliases = _aliases(config)
         if aliases:

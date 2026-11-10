@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Recipient evidence prompts explicitly omit streets, postcodes and cities to
+  avoid rejecting a correctly recognised name because its address differs from
+  OCR. Evidence validation remains strict.
+
 - Built-in recipient instructions and the household example recognise explicitly
   named qualification, training and award certificate holders without a postal
   address. Existing OCR name evidence checks still apply. Custom prompts must add

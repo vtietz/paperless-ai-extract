@@ -247,6 +247,12 @@ matched as before. The shortlist is part of the cache key.
 
 ## Locale rules for addresses
 
+`addressee_text` should contain only the printed recipient/holder names, without
+street, postcode or city. The complete quote must be supported by OCR; returning
+a whole postal address can reject a correct recipient because the address text
+differs. Custom prompts should explicitly request names only. Evidence checks
+remain strict; a model prediction alone does not confirm a recipient.
+
 The recipient check accepts a configured multi-person alias only as a
 standalone address line. The line must be followed by a street line (matching
 `street_number`) and a city line (matching `postal_code`), and must not

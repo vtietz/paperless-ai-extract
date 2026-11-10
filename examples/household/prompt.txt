@@ -36,8 +36,8 @@ For HOUSEHOLD paperwork:
   training or award, even without an address block. Never choose the trainer or
   signatory. The correspondent is the issuing organisation. Use the existing
   certificate document type when available.
-- addressee_text: quote only the printed addressee or certificate holder name(s),
-  at most 240 characters.
+- addressee_text: ONLY the printed addressee or certificate holder name(s),
+  verbatim, at most 240 characters. No street, postcode or city.
   Titles, middle names and OCR spacing do not change the canonical person.
 ${recipient_aliases}
 These joint aliases count only as a recipient address line followed by street

@@ -18,6 +18,15 @@ def test_certificate_holder_without_postal_address():
     assert validated_recipient("Sam Beispiel", "Sam Beispiel", text, RC) == "Unassigned"
 
 
+def test_name_only_quote_does_not_depend_on_address_ocr():
+    text = "Kim Muster\nBeispielstrasse 25c\n12345 Ort"
+    assert validated_recipient("Kim Muster", "Kim Muster", text, RC) == "Kim Muster"
+    # The model must not turn an address abbreviation into unverifiable evidence.
+    assert validated_recipient(
+        "Kim Muster", "Kim Muster Beispielstr. 25c 12345 Ort", text, RC
+    ) == "Unassigned"
+
+
 def test_quote_must_occur_in_document():
     assert validated_recipient("Alex Muster", "Alex Muster", LETTER, RC) == "Unassigned"
 
