@@ -32,7 +32,12 @@ For HOUSEHOLD paperwork:
 - authors: []. publication_year: null.
 - recipient: one EXACT allowed household name, based on the addressee/address.
   Never use the sender, signatory or a person merely mentioned in the body.
-- addressee_text: quote only the printed addressee name(s), at most 240 characters.
+- Certificate exception: choose the explicitly named person awarded the qualification,
+  training or award, even without an address block. Never choose the trainer or
+  signatory. The correspondent is the issuing organisation. Use the existing
+  certificate document type when available.
+- addressee_text: quote only the printed addressee or certificate holder name(s),
+  at most 240 characters.
   Titles, middle names and OCR spacing do not change the canonical person.
 ${recipient_aliases}
 These joint aliases count only as a recipient address line followed by street

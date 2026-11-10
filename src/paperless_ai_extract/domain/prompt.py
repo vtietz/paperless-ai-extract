@@ -111,10 +111,12 @@ def field_instructions(config: Config, recipient_labels: list[str] | None,
     if ex.recipient.enabled:
         lines += [
             "- recipient: exactly one allowed name, based on the addressee or address "
-            "block; never the sender, signatory or a person mentioned in the body. "
+            "block. For a qualification, training or award certificate, use the explicitly "
+            "named certificate holder even without an address block. Never use the sender, "
+            "trainer, signatory or a person merely mentioned in the body. "
             f"Allowed: {json.dumps(recipient_labels or [], ensure_ascii=False)}. "
             f"Use {ex.recipient.unassigned!r} when unknown or ambiguous.",
-            "- addressee_text: quote only the printed addressee name(s), at most 240 characters.",
+            "- addressee_text: quote only the printed addressee or certificate holder name(s), at most 240 characters.",
         ]
         aliases = _aliases(config)
         if aliases:

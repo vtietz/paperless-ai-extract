@@ -179,6 +179,45 @@ new correspondents from time to time and map variants with
 `correspondent_aliases`. For a first bulk import into an empty correspondent
 list, `propose` is the more cautious choice.
 
+## Ownership and sharing
+
+Paperless checks access to documents and their metadata objects separately.
+Global model permissions are required, but do not make another user's privately
+owned correspondents visible to the service account. A shared document may
+therefore reference a correspondent the service cannot retrieve.
+
+If an organisation is clearly recognised but proposed as "(new)", check whether
+an existing correspondent is private. The UI may display "Private" instead of
+its name, and the service account's API request for that object's ID may return
+404. The extractor cannot match entries hidden from its API account; accepting
+such a proposal can create a duplicate.
+
+If the correct name appears after a page reload, the browser's cached metadata
+list may instead be stale after an API-created correspondent. Reload before
+changing permissions; a "Private" label alone does not prove an access denial.
+
+For a household with shared organisation names, use ownerless correspondents.
+In Paperless's Correspondents management screen, edit the entry's permissions
+and clear its owner. Ownerless entries are accessible to accounts with the
+relevant global permissions; they are not restricted to one household group.
+Alternatively, retain the owner and explicitly grant view access to the service
+account and view/change access to the household group. Do the same for other
+metadata objects the service needs to read. Making a correspondent shared does
+not change the permissions of documents associated with it.
+
+These changes persist and are picked up on subsequent analyses. Reanalyse
+before accepting an old proposal that calls a now-visible entry "new".
+Existing entries can be shared in bulk; future entries created manually still
+use the creating user's defaults under **Settings → Permissions**. Check these
+defaults for each account: they also affect other newly created objects and do
+not retroactively change existing entries. The extractor already creates new
+correspondents and document types with `owner: null`.
+
+Documents imported through the consume folder normally have no owner unless a
+workflow or other import setting assigns one. This does not determine ownership
+of separately created correspondents. The optional `Recipient` custom field is
+filing metadata, not a Paperless owner or access-control setting.
+
 ## Storage paths
 
 The service does not set storage paths (removed in 0.4.0). Paperless already

@@ -12,6 +12,12 @@ def test_unassigned_passes_through():
     assert validated_recipient("Unassigned", "", LETTER, RC) == "Unassigned"
 
 
+def test_certificate_holder_without_postal_address():
+    text = "Zertifikat\nKim Muster\nhat die Ausbildung abgeschlossen.\nLeitung: Alex Muster"
+    assert validated_recipient("Kim Muster", "Kim Muster", text, RC) == "Kim Muster"
+    assert validated_recipient("Sam Beispiel", "Sam Beispiel", text, RC) == "Unassigned"
+
+
 def test_quote_must_occur_in_document():
     assert validated_recipient("Alex Muster", "Alex Muster", LETTER, RC) == "Unassigned"
 

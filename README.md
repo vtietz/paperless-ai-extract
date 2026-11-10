@@ -19,7 +19,8 @@ It is deliberately **conservative**:
   note. If the document is re-analysed first, the accept tag is removed and
   you review the new proposal.
 - **Your lists stay yours.** Correspondents and document types are managed in
-  Paperless. New entries suggested by the model are only proposals by default.
+  Paperless. New correspondents are created when backed by OCR evidence;
+  new document types are proposed by default. Both policies are configurable.
 - **Fail-closed evidence checks.** New correspondents, dates, journal names and
   addressees must be backed by the document text. Otherwise they become a
   proposal, not a fill.
@@ -33,13 +34,42 @@ It extracts the following; everything except the first three is optional:
 | title, correspondent, document type | The model sees your document types and the correspondents that appear in the document (a shortlist), and picks the best fit; answers are matched again (aliases, exact, fuzzy). A new correspondent is **created** when its name appears in the OCR text, otherwise **proposed** and created only when you accept it; new document types are proposed (both configurable: create, propose, never). |
 | tags | Chosen **only from existing tags** (optionally an allowlist), added and never removed. |
 | document date | Proposed by default, or set on the first analysis when the date is printed. |
-| addressee / recipient | A select custom field (e.g. household member), validated against the address block. Configurable aliases and locale rules, plus an optional second OCR reading of the address window. |
+| addressee / recipient | A select custom field (e.g. household member), validated against the printed addressee or certificate holder name. Configurable aliases and locale rules, plus an optional second OCR reading of the address window. |
 | articles | Authors (custom field), journal as correspondent, and publication year as the date. |
 
 Storage paths are left to Paperless: give your library one scheme with
 `PAPERLESS_FILENAME_FORMAT`, and handle exceptions with a Paperless workflow,
 e.g. *document type is "Article" → storage path "Articles"* (see
 [configuration](docs/configuration.md#storage-paths)).
+
+### Why a separate extractor instead of built-in AI?
+
+This project grew out of a household deployment where Paperless's built-in AI
+suggestions did not meet the extraction requirements. The reasons were:
+
+- **Page layout matters.** The built-in suggestion pipeline we tested used OCR
+  text. Reading the page image also helps distinguish the issuer, addressee,
+  certificate holder and dates near signatures or stamps. OCR still provides
+  independent text evidence; vision does not make recognition infallible.
+- **Custom filing metadata.** We needed a household Recipient custom field,
+  name aliases, certificate-holder rules and article authors/publication years,
+  alongside the ordinary title, correspondent and document type. These rules
+  are configurable rather than changes to Paperless itself.
+- **A small inference budget.** In that CPU-only deployment, a stock suggestion
+  request containing OCR text, similar documents and taxonomy reached about
+  7,000 tokens and exceeded the configured 4,096-token context. A later request
+  through this extractor used about 1,800 prompt tokens and took roughly a minute.
+  These are deployment observations, not a general performance benchmark;
+  model, input and hardware affect the result.
+- **Controlled review without internal overrides.** We wanted the same engine
+  for imports and manual re-analysis, OCR-backed evidence checks, and proposals
+  that preserve existing metadata. Earlier overrides of Paperless's internal
+  prompt templates needed attention on upgrades; the sidecar uses its REST API.
+
+Built-in AI remains a reasonable choice when its fields and review behaviour
+meet your needs and the model has enough context and compute. This extractor
+adds a service to maintain and does not replace Paperless's chat/search features.
+Those features can be evaluated separately; they are not required for extraction.
 
 ### How it compares
 
@@ -59,8 +89,11 @@ existing metadata alone.
    - view: Custom field
 
    Create an API token for it (profile menu → API token).
-   *Documents owned by other users must be shared with this user, or use an
-   admin account.*
+   Documents owned by other users must be shared with this user. Existing
+   correspondents, document types, tags and custom fields must also be visible
+   to it: sharing a document does not share its metadata objects. For a shared
+   household taxonomy, make those entries ownerless, or grant the service user
+   object-level access. See [ownership and sharing](docs/configuration.md#ownership-and-sharing).
 
 2. Next to your Paperless `docker-compose.yml`, copy
    [`examples/ai-extract.env.example`](examples/ai-extract.env.example) to

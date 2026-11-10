@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Built-in recipient instructions and the household example recognise explicitly
+  named qualification, training and award certificate holders without a postal
+  address. Existing OCR name evidence checks still apply. Custom prompts must add
+  this exception themselves; certificate types and filing paths stay in Paperless.
+
 ## 0.5.0 — 2026-11-08
 
 - **Behaviour change:** `taxonomy.new_correspondents` now defaults to `create`.
