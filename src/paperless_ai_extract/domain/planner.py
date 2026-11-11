@@ -151,7 +151,7 @@ def build_candidates(config: Config, ex: Extraction, doc: DocumentSnapshot,
         else:
             cand = _new_item("correspondent", "correspondents", name,
                              tax_cfg.new_correspondents, msg)
-            if cand and tax_cfg.new_correspondent_requires_text_evidence and not (
+            if cand and tax_cfg.new_correspondent_requires_text_evidence and not ex.correspondent_image_confirmed and not (
                     occurs_in(name, content) or occurs_in(ex.correspondent, content)):
                 cand.verified, cand.reason = False, msg("reason_new_name")
             if cand is None:
@@ -187,7 +187,10 @@ def build_candidates(config: Config, ex: Extraction, doc: DocumentSnapshot,
     if rc.enabled and not is_article and access.recipient_field and ex.recipient:
         options = access.recipient_options()
         unassigned_id = options.get(rc.unassigned)
-        chosen = validated_recipient(ex.recipient, ex.addressee_text, content, rc)
+        from .matching import recipient_match
+        chosen = ((recipient_match(ex.addressee_text, list(options), rc) or rc.unassigned)
+                  if config.extraction.blind_names else
+                  validated_recipient(ex.recipient, ex.addressee_text, content, rc))
         current = access.current(doc, "recipient")
         if chosen == rc.unassigned and current in (None, "", unassigned_id):
             confirmed = confirm_address()

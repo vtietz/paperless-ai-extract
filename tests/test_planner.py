@@ -95,7 +95,7 @@ def test_address_window_confirmation(config, taxonomy):
     p = plan(config, taxonomy, extraction(addressee_text="x"), letter_doc(content=content),
              confirm=confirm)
     assert by_field(p)[("recipient", "fill")].value == "opt-joint"
-    assert calls and any("address-window" in i for i in p.info)
+    assert calls and any("additional address reading" in i for i in p.info)
 
 
 def test_address_window_not_used_when_recipient_already_set(config, taxonomy):

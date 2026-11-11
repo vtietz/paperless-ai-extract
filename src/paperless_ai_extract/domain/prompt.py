@@ -109,6 +109,13 @@ def field_instructions(config: Config, recipient_labels: list[str] | None,
         lines.append("- document_date: the date the document was issued or written, as "
                      "YYYY-MM-DD; not due, delivery or service dates; null if not printed.")
     if ex.recipient.enabled:
+        if ex.blind_names:
+            lines += [
+                "- recipient and addressee_text: transcribe the personal name(s) exactly "
+                "as printed in the recipient address block, or certificate holder. "
+                "Exclude sender, signatories and body mentions. Preserve abbreviated "
+                "joint names; never expand names. Empty string if unknown. No address."]
+            return "\n".join(lines)
         lines += [
             "- recipient: exactly one allowed name, based on the addressee or address "
             "block. For a qualification, training or award certificate, use the explicitly "
@@ -130,6 +137,9 @@ def render_instructions(config: Config, template_text: str | None,
                         tag_names: list[str] | None = None,
                         type_names: list[str] | None = None,
                         correspondent_names: list[str] | None = None) -> str:
+    if config.extraction.blind_names:
+        recipient_labels = []
+        correspondent_names = []
     return Template(template_text or DEFAULT_TEMPLATE).safe_substitute(
         source_description=source_description(config.input.mode, config.input.pages),
         input_hint=input_hint(config.input.mode),
@@ -140,7 +150,7 @@ def render_instructions(config: Config, template_text: str | None,
         document_type_options=json.dumps(type_names or [], ensure_ascii=False),
         correspondent_options=json.dumps(correspondent_names or [], ensure_ascii=False),
         recipient_options=json.dumps(recipient_labels or [], ensure_ascii=False),
-        recipient_aliases=_aliases(config),
+        recipient_aliases="" if config.extraction.blind_names else _aliases(config),
     ).strip()
 
 

@@ -7,6 +7,7 @@ from datetime import date
 from ..config import ExtractionConfig
 from .errors import ExtractionError
 from .models import Extraction
+from .matching import recipient_match
 
 DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
 
@@ -42,7 +43,8 @@ def build_schema(config: ExtractionConfig, recipient_labels: list[str] | None,
         if not recipient_labels:
             raise ValueError("recipient extraction needs dropdown labels")
         props["addressee_text"] = {"type": "string", "maxLength": 240}
-        props["recipient"] = {"type": "string", "enum": list(recipient_labels)}
+        props["recipient"] = ({"type": "string", "maxLength": 240} if config.blind_names
+                              else {"type": "string", "enum": list(recipient_labels)})
     return {"type": "object", "additionalProperties": False,
             "properties": props, "required": list(props)}
 
@@ -111,11 +113,14 @@ def parse_extraction(text: str, config: ExtractionConfig,
         result.document_date = _iso_date(data.get("document_date"))
     if config.recipient.enabled:
         recipient = data.get("recipient")
-        if recipient not in (recipient_labels or []):
+        if not isinstance(recipient, str):
+            raise ExtractionError("recipient must be a string")
+        if not config.blind_names and recipient not in (recipient_labels or []):
             raise ExtractionError("recipient is not one of the configured dropdown labels")
         addressee = data.get("addressee_text", "")
         if not isinstance(addressee, str):
             raise ExtractionError("addressee_text must be a string")
-        result.recipient = recipient
+        result.recipient = ((recipient_match(addressee, recipient_labels or [], config.recipient)
+                             or config.recipient.unassigned) if config.blind_names else recipient)
         result.addressee_text = addressee[:240]
     return result

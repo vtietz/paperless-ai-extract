@@ -275,3 +275,40 @@ extraction:
   fingerprint. Cached extractions are then ignored, and documents are
   re-analysed on their next queue run.
 - Proposals already stored remain applicable; they record the value they expect.
+
+### Recipient second image pass
+
+`extraction.recipient.second_image_pass` defaults to `false`. Enable it to retry
+recipient confirmation with a fresh image-only request when text evidence and
+the existing joint-address OCR fallback fail. No household options, OCR or first
+answer are included. A clear full name must match the first extraction's canonical
+recipient exactly after case/punctuation/spacing normalization. The first page
+is rendered at at least 1600 pixels. Shared/Unassigned choices and text-only mode
+are excluded. Failures or ambiguity preserve review; manual selections and rerun
+proposal policy remain unchanged. This uses the same configured model and may
+add one inference per affected analysis, including cached first extractions.
+
+### Blind names
+
+`extraction.blind_names: true` removes recipient labels/aliases and correspondent
+options from generated prompts, and removes the recipient schema enum. Custom
+prompts must also remove literal name lists and ask for verbatim recipient names
+in `addressee_text`. Matching is deterministic against canonical names and explicit
+aliases, ignoring word order, punctuation, case and common honorifics. Exactly one
+label must match; surname-only and ambiguous matches fail closed. The special
+Shared label is not guessed. Full names matched from the image bypass OCR.
+
+With recipient `second_image_pass: true`, unmatched recipients can receive a
+fresh first-page name reading, then the same unique matching. New correspondent
+names without text evidence also receive a blind sender reading: its name must
+agree after normalization/configured aliases to bypass the text requirement.
+Existing-name matching, manual values, rerun proposals and article publication
+checks are preserved. Blind mode should use image input. Text-only mode does not
+run image fallbacks. Cache fingerprints include matching rules/dropdown labels.
+
+Additional full given names are accepted between a canonical given-name prefix
+and its surname, without configuring combinations. Each joint person must match
+one-to-one; multiple matching recipient options fail closed. Additional initials,
+digits, changed surnames and names prepended before the canonical first name are
+not accepted by this extension. Explicit alias and existing exact matching remain
+available. Matching revision 2 invalidates old extraction caches.

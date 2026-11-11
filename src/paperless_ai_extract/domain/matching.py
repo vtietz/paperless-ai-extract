@@ -15,6 +15,61 @@ def compact(value: str) -> str:
     return re.sub(r"[^\w]", "", value.casefold())
 
 
+def recipient_match(printed: str, labels: list[str], config) -> str | None:
+    """Unique full-name/explicit-alias match; never infer a person from a surname."""
+    def key(value):
+        people = re.split(r'\s*(?:&|/|\bund\b|\band\b)\s*', value.casefold())
+        parts = []
+        for person in people:
+            words = re.findall(r"\w+", person)
+            words = tuple(sorted(w for w in words if w not in {'herr', 'frau', 'mr', 'mrs', 'ms'}))
+            if not words:
+                return ()
+            parts.append(words)
+        return tuple(sorted(parts))
+    wanted = key(printed)
+    if not wanted:
+        return None
+
+    def ordered_people(value):
+        people = re.split(r'\s*(?:&|/|\bund\b|\band\b)\s*', value.casefold())
+        return [tuple(w for w in re.findall(r'\w+', person)
+                      if w not in {'herr', 'frau', 'mr', 'mrs', 'ms'})
+                for person in people]
+
+    def person_matches(actual, canonical):
+        if sorted(actual) == sorted(canonical):
+            return True
+        # Keep the complete canonical given-name prefix and surname. Only
+        # additional full given names between them may be omitted locally.
+        if len(canonical) < 2 or len(actual) <= len(canonical):
+            return False
+        prefix = canonical[:-1]
+        extra = actual[len(prefix):-1]
+        return (actual[:len(prefix)] == prefix and actual[-1] == canonical[-1]
+                and bool(extra) and all(len(w) >= 2 and w.isalpha() for w in extra))
+
+    def expanded_match(label):
+        actual, canonical = ordered_people(printed), ordered_people(label)
+        if len(actual) != len(canonical):
+            return False
+        # One-to-one matching preserves each person's first/surname pairing.
+        choices = [set(i for i, person in enumerate(canonical) if person_matches(p, person))
+                   for p in actual]
+        choices.sort(key=len)
+        def assign(index, used):
+            if index == len(choices):
+                return True
+            return any(assign(index + 1, used | {i}) for i in choices[index] - used)
+        return assign(0, set())
+
+    matches = {label for label in labels
+               if label not in (config.unassigned, config.shared)
+               and (any(key(variant) == wanted for variant in
+                        [label] + config.aliases.get(label, [])) or expanded_match(label))}
+    return next(iter(matches)) if len(matches) == 1 else None
+
+
 def _native(value: str) -> str:
     return re.sub(r"[^\w\s]", "", value.lower()).strip()
 

@@ -132,6 +132,7 @@ class AddressRulesConfig(Strict):
 class RecipientConfig(Strict):
     """A select custom field filled with the addressee (e.g. household member)."""
     enabled: bool = False
+    second_image_pass: bool = False
     custom_field: str = "Recipient"
     unassigned: str = "Unassigned"
     shared: str | None = None
@@ -189,6 +190,7 @@ class DocumentDateConfig(Strict):
 
 
 class ExtractionConfig(Strict):
+    blind_names: bool = False
     # None = built-in prompt (adapts to the enabled features).
     prompt_file: Path | None = None
     kinds: list[str] = Field(default_factory=lambda: ["document"])
