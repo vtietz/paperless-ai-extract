@@ -133,6 +133,7 @@ class RecipientConfig(Strict):
     """A select custom field filled with the addressee (e.g. household member)."""
     enabled: bool = False
     second_image_pass: bool = False
+    auto_fill_unassigned: bool = False
     custom_field: str = "Recipient"
     unassigned: str = "Unassigned"
     shared: str | None = None

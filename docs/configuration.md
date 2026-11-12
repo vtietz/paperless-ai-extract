@@ -75,6 +75,7 @@ extraction:
     first_run: propose                # propose | fill (fill only when the date is printed)
   recipient:                          # optional select custom field for the addressee
     enabled: false
+    auto_fill_unassigned: false        # verified recipient fills empty/Unassigned even on reruns
     custom_field: Recipient
     unassigned: Unassigned            # must exist in the dropdown
     shared: null                      # optional option for household-wide documents
@@ -275,6 +276,16 @@ extraction:
   fingerprint. Cached extractions are then ignored, and documents are
   re-analysed on their next queue run.
 - Proposals already stored remain applicable; they record the value they expect.
+
+### Automatic recipient fill
+
+`extraction.recipient.auto_fill_unassigned` defaults to `false`. Enable it to
+automatically fill a verified recipient when the current value is empty or the
+configured Unassigned option, including re-analysis with `rerun: propose`.
+Selected people and Shared remain protected; unverified readings still require
+review. This exception applies only to the recipient and respects `policy.fields`.
+Other metadata continues to follow the normal first-run/rerun policy. It does not
+automatically queue existing documents.
 
 ### Recipient second image pass
 

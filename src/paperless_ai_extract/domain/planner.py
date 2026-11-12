@@ -272,6 +272,14 @@ def decide(config: Config, candidates: list[Candidate], doc: DocumentSnapshot,
 
         empty = (cand.treat_as_empty if cand.treat_as_empty is not None
                  else access.is_empty(doc, cand.field))
+        # Opt-in exception for a placeholder, including re-analysis. A selected
+        # person or Shared value still follows the normal overwrite policy.
+        if (cand.field == "recipient" and config.extraction.recipient.auto_fill_unassigned
+                and cand.verified and current in (None, "", unassigned)
+                and cand.value not in (None, unassigned)
+                and cand.display != config.extraction.recipient.shared):
+            changes.append(change("fill", cand.value, cand.display))
+            continue
         if empty and policy == "fill_empty":
             if cand.verified:
                 changes.append(change("fill", cand.value, cand.display, create=cand.create))

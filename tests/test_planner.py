@@ -1,4 +1,5 @@
 """Policy rules of the pure planner."""
+import pytest
 from paperless_ai_extract.domain.models import Extraction
 from paperless_ai_extract.domain.messages import Messages
 from paperless_ai_extract.domain.planner import note_text, plan_document
@@ -48,6 +49,43 @@ def test_rerun_only_proposes(config, taxonomy):
     p = plan(config, taxonomy, extraction(), letter_doc(), mode="rerun")
     assert {c.field for c in p.proposals} >= {"title", "correspondent", "document_type", "recipient"}
     assert not p.fills
+
+
+@pytest.mark.parametrize("current", [None, "", "opt-none"])
+@pytest.mark.parametrize("mode", ["first_run", "rerun"])
+def test_auto_fill_unassigned_recipient(config, taxonomy, current, mode):
+    config.extraction.recipient.auto_fill_unassigned = True
+    doc = letter_doc(custom_fields={} if current is None else {RECIPIENT_FIELD["id"]: current})
+    p = plan(config, taxonomy, extraction(), doc, mode=mode)
+    fill = by_field(p)[("recipient", "fill")]
+    assert fill.value == "opt-joint" and fill.expect == current
+    if mode == "rerun":
+        assert [c.field for c in p.fills] == ["recipient"]
+
+
+@pytest.mark.parametrize("current", ["opt-alex", "opt-shared"])
+def test_auto_fill_preserves_selected_recipient(config, taxonomy, current):
+    config.extraction.recipient.auto_fill_unassigned = True
+    doc = letter_doc(custom_fields={RECIPIENT_FIELD["id"]: current})
+    p = plan(config, taxonomy, extraction(), doc, mode="rerun")
+    assert by_field(p)[("recipient", "propose")].value == "opt-joint"
+    assert not p.fills
+
+
+def test_auto_fill_requires_verified_recipient(config, taxonomy):
+    config.extraction.recipient.auto_fill_unassigned = True
+    ex = extraction(recipient="Kim Muster", addressee_text="Kim Muster")
+    doc = letter_doc(custom_fields={RECIPIENT_FIELD["id"]: "opt-none"})
+    p = plan(config, taxonomy, ex, doc, mode="rerun")
+    assert not p.fills
+    assert not by_field(p)[("recipient", "propose")].verified
+
+
+def test_auto_fill_respects_disabled_policy_field(config, taxonomy):
+    config.extraction.recipient.auto_fill_unassigned = True
+    config.policy.fields = ["title"]
+    p = plan(config, taxonomy, extraction(), letter_doc(), mode="rerun")
+    assert not p.fills and {c.field for c in p.changes} == {"title"}
 
 
 def test_identical_values_produce_no_change(config, taxonomy):
