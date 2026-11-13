@@ -58,6 +58,7 @@ class Extraction:
     tags: list[str] = field(default_factory=list)
     document_date: str | None = None
     correspondent_image_confirmed: bool = False
+    document_date_image_confirmed: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)

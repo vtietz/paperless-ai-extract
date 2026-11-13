@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from .adapters.address_ocr import NoAddressReader, TesseractAddressReader
+from .adapters.date_ocr import TesseractDateReader
 from .adapters.llm import create_llm_client
 from .adapters.paperless import PaperlessClient
 from .adapters.rendering import PopplerPillowRenderer
@@ -20,6 +21,7 @@ def build_extractor(config: Config) -> MetadataExtractor:
         renderer=PopplerPillowRenderer(),
         address_reader=TesseractAddressReader(window) if window.enabled else NoAddressReader(),
         state=SqliteStateStore(config.state.path),
+        date_reader=TesseractDateReader(),
     )
 
 

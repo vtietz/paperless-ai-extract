@@ -259,6 +259,7 @@ FieldName = Literal["title", "correspondent", "document_type",
 
 
 class PolicyConfig(Strict):
+    auto_update_inbox: bool = False
     fields: list[FieldName] = Field(default_factory=lambda: [
         "title", "correspondent", "document_type",
         "created", "recipient", "authors", "tags"])

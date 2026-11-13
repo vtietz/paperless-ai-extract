@@ -241,7 +241,8 @@ def build_candidates(config: Config, ex: Extraction, doc: DocumentSnapshot,
                                         treat_as_empty=first_pass))
     elif config.extraction.document_date.enabled and ex.document_date \
             and ex.document_date != current_date:
-        verified = date_supported(ex.document_date, content)
+        verified = (date_supported(ex.document_date, content)
+                    or ex.document_date_image_confirmed)
         fill = config.extraction.document_date.first_run == "fill" and mode == "first_run"
         candidates.append(Candidate("created", ex.document_date, ex.document_date,
                                     verified=verified,
@@ -255,6 +256,8 @@ def decide(config: Config, candidates: list[Candidate], doc: DocumentSnapshot,
            access: FieldAccess, mode: str) -> list[Change]:
     allowed = set(config.policy.fields)
     policy = config.policy.first_run if mode == "first_run" else config.policy.rerun
+    auto_update = config.policy.auto_update_inbox and any(
+        tag.inbox and tag.id in doc.tags for tag in access.taxonomy.tags)
     unassigned = access.recipient_options().get(config.extraction.recipient.unassigned)
     changes: list[Change] = []
 
@@ -272,6 +275,12 @@ def decide(config: Config, candidates: list[Candidate], doc: DocumentSnapshot,
 
         empty = (cand.treat_as_empty if cand.treat_as_empty is not None
                  else access.is_empty(doc, cand.field))
+        # Inbox is the human review boundary. Only supported candidates may
+        # replace values; uncertain/new-proposed candidates still need review.
+        if auto_update and cand.verified and not (
+                cand.field == "recipient" and cand.value == unassigned):
+            changes.append(change("fill", cand.value, cand.display, create=cand.create))
+            continue
         # Opt-in exception for a placeholder, including re-analysis. A selected
         # person or Shared value still follows the normal overwrite policy.
         if (cand.field == "recipient" and config.extraction.recipient.auto_fill_unassigned

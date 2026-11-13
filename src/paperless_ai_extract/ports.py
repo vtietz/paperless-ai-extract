@@ -48,6 +48,11 @@ class PageRenderer(Protocol):
         """PNG images of the first pages; raise UnsupportedInput if impossible."""
 
 
+class DateReader(Protocol):
+    def supports(self, image: bytes, iso_date: str) -> bool:
+        """Independent image OCR contains this complete date."""
+
+
 class AddressReader(Protocol):
     def read(self, pdf: bytes) -> list[str] | None:
         """Independent OCR readings of the address window, or None if unsuitable."""

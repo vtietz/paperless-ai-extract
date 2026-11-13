@@ -199,6 +199,9 @@ def test_second_image_pass_not_needed_when_text_confirms(build, config_factory):
     ('Beispiel/Muster', 'opt-joint'),
     ('Muster/Beispiel', 'opt-joint'),
     ('Alex Muster', 'opt-alex'),
+    ('Alex Muster Sam Beispiel', 'opt-joint'),
+    ('Sam Beispiel\nAlex Muster', 'opt-joint'),
+    ('Frau und Herrn Alex Muster Sam Beispiel', 'opt-joint'),
     ('Muster', 'opt-none'),
 ])
 def test_blind_recipient_matching(build, config_factory, printed, expected):
@@ -292,3 +295,93 @@ def test_middle_names_fill_from_blind_image(build,config_factory):
     ex.process(1,ex.context())
     assert store.docs[1].custom_fields[1]=='opt-alex'
     assert len(llm.calls)==1
+
+
+@pytest.mark.parametrize('printed,expected', [
+    ('Alex Muster Sam Beispiel', JOINT),
+    ('Sam Beispiel\nAlex Muster', JOINT),
+    ('Frau und Herrn Alex Muster Sam Beispiel', JOINT),
+    ('Herrn Alex Muster', 'Alex Muster'),
+    ('Alex Hans-Jürgen Muster Sam Gustaf Beispiel', JOINT),
+    ('Sam Gustaf Beispiel Alex Hans-Jürgen Muster', JOINT),
+    ('Alex Beispiel Sam Muster', None),
+    ('Alex Muster Sam', None),
+    ('Muster Beispiel', None),
+    ('Alex Muster Alex Muster', None),
+    ('Alex Muster Sam Beispiel Fremdname', None),
+    ('Alex Muster\nSam Beispiel\nBeispielstrasse 12', None),
+    ('Alex Muster Sam Beispiel 12345 Musterstadt', None),
+    ('Bank Alex Muster Sam Beispiel', None),
+    ('Alex H. Muster Sam Beispiel', None),
+    ('A lex Muster Sam Beispiel', JOINT),
+    ('A lex Mu ster Sam Bei spiel', JOINT),
+    ('Sam Beispiel A lex Muster', JOINT),
+    ('A Muster Sam Beispiel', None),
+    ('A lex Beispiel Sam Muster', None),
+    ('Alex Bei spiel Sam Muster', None),
+])
+def test_joint_names_without_separator(config_factory, printed, expected):
+    from paperless_ai_extract.domain.matching import recipient_match
+    rc = config_factory().extraction.recipient
+    assert recipient_match(printed, ['Alex Muster', 'Sam Beispiel', JOINT, 'Unassigned'], rc) == expected
+
+
+def test_unseparated_joint_match_must_be_unique(config_factory):
+    from paperless_ai_extract.domain.matching import recipient_match
+    rc = config_factory().extraction.recipient
+    assert recipient_match('Alex Muster Sam Beispiel',
+                           [JOINT, 'Alex Muster Sam Beispiel'], rc) is None
+
+
+@pytest.mark.parametrize('mode', ['first_run', 'rerun'])
+def test_inbox_auto_updates_supported_values_and_preserves_inbox(build, config_factory, mode):
+    cfg = config_factory()
+    cfg.policy.auto_update_inbox = True
+    cfg.extraction.document_date.enabled = True
+    doc = letter_doc(title='Old title', correspondent=11, tags=[1, TAGS['pending']],
+                     content=letter_doc().content + '\n31. Juli 2023')
+    extractor, store = build([doc], FakeLLM(answer(document_date='2023-07-31')), cfg=cfg)
+    outcome = extractor.process(1, extractor.context(), force=True, mode=mode)
+    assert {'title', 'correspondent', 'created'} <= {c.field for c in outcome.written}
+    assert store.docs[1].created == '2023-07-31'
+    assert 1 in store.docs[1].tags
+    assert not outcome.plan.proposals
+
+
+def test_inbox_auto_update_keeps_unsupported_date_for_review(build, config_factory):
+    cfg = config_factory()
+    cfg.policy.auto_update_inbox = True
+    cfg.extraction.document_date.enabled = True
+    extractor, store = build([letter_doc(tags=[1])],
+        FakeLLM(answer(document_date='2023-07-31')), cfg=cfg)
+    outcome = extractor.process(1, extractor.context(), mode='rerun')
+    assert store.docs[1].created == '2026-11-01'
+    assert any(c.field == 'created' and not c.verified for c in outcome.plan.proposals)
+    assert TAGS['review'] in store.docs[1].tags
+
+
+def test_inbox_auto_update_preserves_reviewed_documents(build, config_factory):
+    cfg = config_factory()
+    cfg.policy.auto_update_inbox = True
+    extractor, store = build([letter_doc(title='Reviewed title', correspondent=11)],
+                            FakeLLM(answer()), cfg=cfg)
+    outcome = extractor.process(1, extractor.context(), mode='rerun')
+    assert store.docs[1].title == 'Reviewed title'
+    assert not outcome.written and outcome.plan.proposals
+
+
+@pytest.mark.parametrize('confirmed', [True, False])
+def test_date_ocr_fallback_must_confirm_complete_date(build, config_factory, confirmed):
+    cfg = config_factory()
+    cfg.policy.auto_update_inbox = True
+    cfg.extraction.document_date.enabled = True
+    extractor, store = build([letter_doc(tags=[1])],
+        FakeLLM(answer(document_date='2023-07-31')), cfg=cfg)
+    class Reader:
+        def supports(self, image, iso_date):
+            assert image == b'PNG-page' and iso_date == '2023-07-31'
+            return confirmed
+    extractor.date_reader = Reader()
+    outcome = extractor.process(1, extractor.context(), force=True, mode='rerun')
+    assert store.docs[1].created == ('2023-07-31' if confirmed else '2026-11-01')
+    assert outcome.metrics['date_image_ocr'] == ('confirmed' if confirmed else 'unconfirmed')

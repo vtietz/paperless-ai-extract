@@ -322,4 +322,35 @@ and its surname, without configuring combinations. Each joint person must match
 one-to-one; multiple matching recipient options fail closed. Additional initials,
 digits, changed surnames and names prepended before the canonical first name are
 not accepted by this extension. Explicit alias and existing exact matching remain
-available. Matching revision 2 invalidates old extraction caches.
+available.
+
+Joint recipients may also have complete names on consecutive lines or separated
+only by spaces. The whole reading must split into full canonical people (with
+the same middle-name rule), each used once, matching exactly one dropdown label.
+Swapped first/surname pairings, missing names, duplicate people, extra address
+words and ambiguous labels do not match. German `Herrn` and a standalone courtesy
+prefix such as `Frau und Herrn` are ignored. Matching revision 3 invalidates old
+extraction caches when a document is next analysed; it does not bulk requeue.
+Whitespace-split words such as `A lex` can be rejoined only when all letters
+exactly match a canonical name; lone initials are not expanded. Known household
+surnames are not accepted as additional middle names that could hide a second
+person's identity.
+
+### Review metadata in Inbox
+
+`policy.auto_update_inbox: true` applies supported extracted values immediately
+while the document has a Paperless tag marked as an Inbox tag, on first analysis
+and reruns. This includes existing titles, correspondents, document types,
+recipients and supported dates within `policy.fields`. Uncertain candidates and
+new taxonomy entries configured as `propose` still require review. It defaults
+to false. The analyzer never removes Inbox; remove it after reviewing metadata
+and the document. Removing Inbox restores the usual first-run/rerun policy.
+Do not manually curate fields while leaving the document in an auto-update Inbox
+and then rerun AI unless you intend those supported fields to be replaced.
+`AI: apply` remains available for exceptional proposals; it is not required for
+values already applied by the Inbox policy. Date evidence requires the full date
+in OCR, in addition to the model selecting it as the document's issue date.
+When Paperless OCR lacks that date, image mode independently checks fresh
+2400px first-page Tesseract OCR (German/English); failure or mismatch retains a
+proposal. No additional model request is used for this verification. Keep
+`extraction.document_date.first_run: propose` to protect dates outside Inbox.

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import difflib
 import re
+from functools import lru_cache
 
 from .models import Item
 
@@ -17,27 +18,42 @@ def compact(value: str) -> str:
 
 def recipient_match(printed: str, labels: list[str], config) -> str | None:
     """Unique full-name/explicit-alias match; never infer a person from a surname."""
-    def key(value):
+    def ordered_people(value):
         people = re.split(r'\s*(?:&|/|\bund\b|\band\b)\s*', value.casefold())
         parts = []
         for person in people:
-            words = re.findall(r"\w+", person)
-            words = tuple(sorted(w for w in words if w not in {'herr', 'frau', 'mr', 'mrs', 'ms'}))
-            if not words:
-                return ()
-            parts.append(words)
-        return tuple(sorted(parts))
+            words = tuple(w for w in re.findall(r"\w+", person)
+                          if w not in {'herr', 'herrn', 'frau', 'mr', 'mrs', 'ms'})
+            if words:
+                parts.append(words)
+        return parts
+
+    def key(value):
+        return tuple(sorted(tuple(sorted(words)) for words in ordered_people(value)))
     wanted = key(printed)
     if not wanted:
         return None
 
-    def ordered_people(value):
-        people = re.split(r'\s*(?:&|/|\bund\b|\band\b)\s*', value.casefold())
-        return [tuple(w for w in re.findall(r'\w+', person)
-                      if w not in {'herr', 'frau', 'mr', 'mrs', 'ms'})
-                for person in people]
+    surnames = {person[-1] for label in labels
+                if label not in (config.unassigned, config.shared)
+                for person in ordered_people(label) if len(person) >= 2}
+    canonical_words = {word for label in labels
+                       if label not in (config.unassigned, config.shared)
+                       for person in ordered_people(label) for word in person}
+    split_patterns = [(re.compile(r'(?<!\w)' + r'\s*'.join(map(re.escape, word)) + r'(?!\w)'), word)
+                      for word in sorted(canonical_words, key=len, reverse=True) if len(word) >= 2]
+
+    @lru_cache(maxsize=None)
+    def restore_split_words(words):
+        text = ' '.join(words)
+        for pattern, word in split_patterns:
+            text = pattern.sub(word, text)
+        return tuple(text.split())
 
     def person_matches(actual, canonical):
+        # Scans may space out a complete word ("A lex"). Rejoin only exact
+        # canonical letters; a lone initial cannot supply the missing letters.
+        actual = restore_split_words(actual)
         if sorted(actual) == sorted(canonical):
             return True
         # Keep the complete canonical given-name prefix and surname. Only
@@ -47,12 +63,35 @@ def recipient_match(printed: str, labels: list[str], config) -> str | None:
         prefix = canonical[:-1]
         extra = actual[len(prefix):-1]
         return (actual[:len(prefix)] == prefix and actual[-1] == canonical[-1]
-                and bool(extra) and all(len(w) >= 2 and w.isalpha() for w in extra))
+                and bool(extra) and all(len(w) >= 2 and w.isalpha() and w not in surnames
+                                        for w in extra))
 
     def expanded_match(label):
         actual, canonical = ordered_people(printed), ordered_people(label)
         if len(actual) != len(canonical):
-            return False
+            if len(actual) != 1 or len(canonical) < 2 or any(len(p) < 2 for p in canonical):
+                return False
+            # Consecutive address lines often become one whitespace-joined
+            # reading. Require an exhaustive partition into complete people;
+            # never discard unmatched words or reuse a canonical person.
+            words = actual[0]
+
+            @lru_cache(maxsize=None)
+            def partition(offset, used):
+                if used == (1 << len(canonical)) - 1:
+                    return offset == len(words)
+                for i, person in enumerate(canonical):
+                    if used & (1 << i):
+                        continue
+                    remaining = sum(len(p) for j, p in enumerate(canonical)
+                                    if j != i and not used & (1 << j))
+                    for end in range(offset + len(person), len(words) - remaining + 1):
+                        if (person_matches(words[offset:end], person)
+                                and partition(end, used | (1 << i))):
+                            return True
+                return False
+
+            return partition(0, 0)
         # One-to-one matching preserves each person's first/surname pairing.
         choices = [set(i for i, person in enumerate(canonical) if person_matches(p, person))
                    for p in actual]

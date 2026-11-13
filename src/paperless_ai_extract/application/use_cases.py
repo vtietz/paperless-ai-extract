@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from .. import __version__
 from ..config import Config, ConfigError
 from ..domain.errors import ExtractError, UnsupportedInput
-from ..domain.evidence import confirmed_joint_address, normalize, occurs_in
+from ..domain.evidence import confirmed_joint_address, normalize, occurs_in, date_supported
 from ..domain.matching import compact, recipient_match, apply_alias, find
 from ..domain.models import Change, DocumentSnapshot, Extraction, Item, Plan, Taxonomy
 from ..domain.messages import Messages
@@ -22,7 +22,7 @@ from ..domain.planner import (DIRECT_FIELDS, FieldAccess, note_text, plan_docume
                               selectable_tags)
 from ..domain.prompt import render_instructions, with_document_text
 from ..domain.schema import build_schema, parse_extraction
-from ..ports import AddressReader, DocumentStore, LLMClient, PageRenderer, StateStore
+from ..ports import AddressReader, DateReader, DocumentStore, LLMClient, PageRenderer, StateStore
 
 log = logging.getLogger("paperless_ai_extract")
 
@@ -82,13 +82,15 @@ class MetadataExtractor:
         return None
 
     def __init__(self, config: Config, store: DocumentStore, llm: LLMClient,
-                 renderer: PageRenderer, address_reader: AddressReader, state: StateStore):
+                 renderer: PageRenderer, address_reader: AddressReader, state: StateStore,
+                 date_reader: DateReader | None = None):
         self.config = config
         self.store = store
         self.llm = llm
         self.renderer = renderer
         self.address_reader = address_reader
         self.state = state
+        self.date_reader = date_reader
         self.aliases = config.correspondent_aliases()
         path = config.extraction.prompt_file
         self.template = path.read_text() if path else None
@@ -128,7 +130,7 @@ class MetadataExtractor:
             "blind_names": config.extraction.blind_names,
             "recipient_matching": config.extraction.recipient.model_dump(mode='json'),
             "recipient_labels": labels,
-            "recipient_matching_version": 2,
+            "recipient_matching_version": 3,
         }, sort_keys=True, default=str).encode()).hexdigest()[:16]
         create = config.queue.create_missing_tags if create_tags is None else create_tags
         return Context(taxonomy, access, labels, tag_names, schema, instructions, fingerprint,
@@ -263,6 +265,21 @@ class MetadataExtractor:
                     reading and compact(apply_alias(reading, self.aliases)) == compact(name))
                 metrics['correspondent_second_pass'] = (
                     'confirmed' if extraction.correspondent_image_confirmed else 'unconfirmed')
+        if (self.config.extraction.document_date.enabled and extraction.document_date
+                and extraction.kind != self.config.extraction.articles.kind
+                and extraction.document_date != (doc.created or '')[:10]
+                and self.config.input.mode != 'text' and self.date_reader
+                and not date_supported(extraction.document_date, doc.content)):
+            extraction.document_date_image_confirmed = False
+            try:
+                data, mime = download()
+                image = self.renderer.render(data, mime, 1, max(2400, self.config.input.max_edge))[0]
+                extraction.document_date_image_confirmed = self.date_reader.supports(
+                    image, extraction.document_date)
+            except ExtractError:
+                log.warning('document %s: date OCR failed; retaining review', doc_id)
+            metrics['date_image_ocr'] = ('confirmed' if extraction.document_date_image_confirmed
+                                         else 'unconfirmed')
         plan = plan_document(self.config, extraction, doc, ctx.taxonomy, self.aliases,
                              confirm_address, mode)
         return Outcome(plan, extraction, cached, metrics, document=doc)
